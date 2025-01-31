@@ -1,34 +1,77 @@
-#ifndef SECURITY_OPS_H
-#define SECURITY_OPS_H
+#ifndef FILE_OPS_H
+#define FILE_OPS_H
 
 #include <string>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 
-namespace SecOps {
+/**
+ * The Ops namespace encapsulates basic file and directory operations.
+ */
+namespace Ops {
 
     /**
-     * SecurityOps provides cryptographic functions:
-     * - RSA key pair generation and RSA encryption/decryption using OAEP padding.
-     * - AES-256-CBC encryption/decryption.
-     * - SHA-256 hashing.
+     * FileOps provides static methods for reading and writing files,
+     * as well as creating directories and checking for file/directory existence.
      */
-    class SecurityOps {
+    class FileOps {
     public:
-        // Generate a 2048-bit RSA key pair and write keys to files:
-        // "<username>_private.pem" and "<username>_public.pem".
-        static bool generateRSAKeyPair(const std::string &username);
+        /**
+         * writeFile:
+         * Writes the given data (in binary mode) to the specified file path.
+         * Returns true if the operation is successful.
+         */
+        static bool writeFile(const std::string &path, const std::string &data) {
+            std::ofstream ofs(path, std::ios::binary);
+            if (!ofs) return false;
+            ofs.write(data.data(), data.size());
+            return ofs.good();
+        }
 
-        // RSA encryption and decryption functions.
-        static std::string rsaEncrypt(const std::string &plaintext, const std::string &publicKeyPem);
-        static std::string rsaDecrypt(const std::string &ciphertext, const std::string &privateKeyPem);
+        /**
+         * readFile:
+         * Reads the entire content of the file specified by path and returns it as a string.
+         */
+        static std::string readFile(const std::string &path) {
+            std::ifstream ifs(path, std::ios::binary);
+            if (!ifs) return "";
+            std::stringstream buffer;
+            buffer << ifs.rdbuf();
+            return buffer.str();
+        }
 
-        // AES-256-CBC encryption and decryption functions.
-        // The provided key must be exactly 32 bytes.
-        static std::string aesEncrypt(const std::string &plaintext, const std::string &key);
-        static std::string aesDecrypt(const std::string &ciphertext, const std::string &key);
+        /**
+         * makeDirectory:
+         * Creates a directory (and all necessary parent directories) specified by path.
+         * Returns true if the directory is successfully created.
+         */
+        static bool makeDirectory(const std::string &path) {
+            try {
+                std::filesystem::create_directories(path);
+                return true;
+            } catch (...) {
+                return false;
+            }
+        }
 
-        // Compute SHA-256 hash of the given data and return its hexadecimal string.
-        static std::string sha256(const std::string &data);
+        /**
+         * fileExists:
+         * Checks if a file exists at the specified path.
+         */
+        static bool fileExists(const std::string &path) {
+            return std::filesystem::exists(path) && std::filesystem::is_regular_file(path);
+        }
+
+        /**
+         * directoryExists:
+         * Checks if a directory exists at the specified path.
+         */
+        static bool directoryExists(const std::string &path) {
+            return std::filesystem::exists(path) && std::filesystem::is_directory(path);
+        }
     };
-}
+
+} // namespace Ops
 
 #endif

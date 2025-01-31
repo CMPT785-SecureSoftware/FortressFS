@@ -3,12 +3,16 @@
 
 #include <string>
 
+/**
+ * The Shell namespace contains the InteractiveShell class which implements
+ * the command-line interface for the file system.
+ */
 namespace Shell {
 
     /**
      * InteractiveShell provides the interactive command-line interface.
-     * It supports commands: cd, pwd, ls, cat, share, mkdir, mkfile, adduser, and exit.
-     * It enforces role-based and directory-based restrictions.
+     * It supports commands like cd, pwd, ls, cat, share, mkdir, mkfile, and adduser,
+     * and enforces role-based and directory-based restrictions.
      */
     class InteractiveShell {
     public:
@@ -22,14 +26,14 @@ namespace Shell {
         std::string currentDir;   // Virtual current directory.
                                   // For normal users, "/" represents their root (showing only "personal" and "shared").
                                   // For admin, "/" is a special view ("filesystem") listing all users.
-        
-        // Converts a virtual (plaintext) path to the on-disk path (using hashed names).
+
+        // Converts a virtual (plaintext) path to the on-disk path using hashed names.
         std::string resolvePath(const std::string &vpath);
 
-        // Normalizes a path string (resolving '.' and '..').
+        // Normalizes a path string by resolving "." and "..".
         std::string normalizePath(const std::string &path);
 
-        // Command handlers.
+        // Command handler functions.
         void handle_cd(const std::string &arg);
         void handle_pwd();
         void handle_ls();

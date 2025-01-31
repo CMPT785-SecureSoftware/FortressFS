@@ -18,7 +18,7 @@ static const std::string ADMIN_KEYFILE = "admin_keyfile.pem";
 
 /**
  * initFortress:
- * - Creates necessary directories.
+ * - Creates the necessary folder structure.
  * - If the admin keyfile does not exist, generates admin keys,
  *   creates admin's hashed directories, creates admin's per-user mapping file
  *   (named as sha256("admin_file_mapping.json")) in admin's root,
@@ -81,7 +81,7 @@ static void initFortress() {
         UOps::UserOps::mapUser("admin", adminPub);
         // Create admin_mapping.json in FILESYSTEM_DIR.
         json admMap;
-        admMap["admin"] = adminPriv;  // Initially only admin.
+        admMap["admin"] = adminPriv;  // Initially only admin is present.
         std::string admMapStr = admMap.dump(4);
         std::string key = adminPriv.substr(0, 32);
         std::string encryptedAdmMap = SecOps::SecurityOps::aesEncrypt(admMapStr, key);

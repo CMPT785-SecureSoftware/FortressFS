@@ -55,7 +55,7 @@ namespace {
     /**
      * saveUserFileMapping:
      * Encrypts and saves the per-user mapping file in the user's root directory.
-     * The file name is sha256("<username>_file_mapping.json").
+     * The file name is computed as sha256("<username>_file_mapping.json").
      */
     bool saveUserFileMapping(const std::string &userRootPath, const std::string &username, const json &j, const std::string &publicKey) {
         std::string mappingFileName = SecOps::SecurityOps::sha256(username + "_file_mapping.json");
@@ -65,12 +65,12 @@ namespace {
         return Ops::FileOps::writeFile(mappingPath, encrypted);
     }
 
-    // Helper: Returns true if the virtual path is inside the personal directory.
+    // Returns true if the virtual path is inside the personal directory.
     bool isInPersonalDirectory(const std::string &vpath) {
         return (vpath == "/personal" || vpath.find("/personal/") == 0);
     }
 
-    // Helper: Returns true if the virtual path is inside the shared directory.
+    // Returns true if the virtual path is inside the shared directory.
     bool isInSharedDirectory(const std::string &vpath) {
         return (vpath == "/shared" || vpath.find("/shared/") == 0);
     }
@@ -90,9 +90,8 @@ namespace {
         CMD_HELP
     };
 
-    // Helper function to convert command string to Command enum.
+    // Converts a command string to a Command enum value.
     Command getCommand(const std::string &cmd) {
-        // Use an unordered_map to map strings to enum values.
         static const std::unordered_map<std::string, Command> cmdMap = {
             {"cd", CMD_CD},
             {"pwd", CMD_PWD},
@@ -118,14 +117,13 @@ static const std::string FILESYSTEM_DIR = "filesystem";
 
 /**
  * resolvePath:
- * Converts a virtual (plaintext) path to the on-disk path (using hashed names).
- * For shared paths, it uses the global mapping; for personal, it uses the user's root.
+ * Converts a virtual (plaintext) path to the on-disk path using hashed names.
+ * For shared paths, the global mapping is used; for personal paths, the user's root is used.
  */
 std::string InteractiveShell::resolvePath(const std::string &vpath) {
-    // For admin in base view, we do not resolve (return empty string).
-    if (currentUser == "admin" && currentDir == "/") {
+    // For admin in base view, there is no real on-disk path.
+    if (currentUser == "admin" && currentDir == "/")
         return "";
-    }
     if (vpath.find("/shared") == 0) {
         json global = loadGlobalMapping();
         std::string sharedHash = global[currentUser]["shared"];
@@ -133,7 +131,7 @@ std::string InteractiveShell::resolvePath(const std::string &vpath) {
         std::istringstream iss(vpath);
         std::string token;
         std::string path = base;
-        std::getline(iss, token, '/'); // Skip "shared"
+        std::getline(iss, token, '/'); // Skip the "shared" token.
         while (std::getline(iss, token, '/')) {
             if (token.empty() || token == ".") continue;
             if (token == "..") {
@@ -166,7 +164,7 @@ std::string InteractiveShell::resolvePath(const std::string &vpath) {
 
 /**
  * normalizePath:
- * Normalizes a path by resolving "." and ".." components.
+ * Normalizes a path string by resolving "." and ".." components.
  */
 std::string InteractiveShell::normalizePath(const std::string &path) {
     std::vector<std::string> parts;
@@ -192,8 +190,8 @@ std::string InteractiveShell::normalizePath(const std::string &path) {
 
 /**
  * Constructor:
- * Ensures the user's hashed base folder and its subdirectories ("personal" and "shared")
- * exist. Also creates the per-user mapping file (if not present).
+ * Ensures the user's hashed base folder and its "personal" and "shared" subdirectories exist.
+ * Also creates the per-user mapping file if it does not already exist.
  */
 InteractiveShell::InteractiveShell(const std::string &username)
     : currentUser(username), currentDir("/") {
@@ -208,7 +206,7 @@ InteractiveShell::InteractiveShell(const std::string &username)
         // Create per-user mapping file for personal directory.
         json personalMapping;
         personalMapping["username"] = currentUser;
-        // Files/folders stored as { hash: [originalName, "d" or "f"] }.
+        // Files and folders stored as { hash: [originalName, "d" (directory) or "f" (file)] }.
         personalMapping["files"] = json::object();
         std::string pubFilePath = "public_keys/" + currentUser + "_public.pem";
         std::ifstream pubFile(pubFilePath);
@@ -221,16 +219,16 @@ InteractiveShell::InteractiveShell(const std::string &username)
 
 /**
  * handle_cd:
- * Changes the virtual directory.
- * - For non-admin users, "/" is fixed (only "personal" and "shared" are visible).
- * - For admin in base view, cd <username> moves into that user's view (read-only).
- * - Admin can use "cd .." to return to base view.
+ * Changes the current virtual directory.
+ * - Non-admin users cannot cd to "/" (their root is fixed).
+ * - Admin in base view ("/") can cd to a username (via admin_mapping) to view that user's directories.
+ * - Admin inside a user's view may use "cd .." to return to base view.
  */
 void InteractiveShell::handle_cd(const std::string &arg) {
     if (arg.empty())
         return;
     std::string target = arg;
-    // Admin in base view: cd to a username from admin_mapping.
+    // For admin in base view.
     if (currentUser == "admin" && currentDir == "/") {
         json adminMapping;
         std::string adminMappingFile = SecOps::SecurityOps::sha256("admin_mapping.json");
@@ -246,7 +244,7 @@ void InteractiveShell::handle_cd(const std::string &arg) {
             }
         }
         if (adminMapping.contains(target)) {
-            // Set currentDir to "/" + target, representing the target user's view.
+            // Change to the target user's view.
             currentDir = "/" + target;
             return;
         } else {
@@ -283,9 +281,9 @@ void InteractiveShell::handle_cd(const std::string &arg) {
 /**
  * handle_pwd:
  * Prints the current virtual directory.
- * For normal users, "/" represents their root (only "personal" and "shared" are shown).
- * For admin in base view, pwd prints "filesystem".
- * For admin in a user's view, pwd prints "/<username>".
+ * - For normal users, "/" shows their root (only "personal" and "shared").
+ * - For admin in base view, pwd prints "filesystem".
+ * - For admin in a user's view, pwd prints "/<username>".
  */
 void InteractiveShell::handle_pwd() {
     if (currentUser == "admin" && currentDir == "/")
@@ -297,9 +295,9 @@ void InteractiveShell::handle_pwd() {
 /**
  * handle_ls:
  * Lists the contents of the current directory.
- * - In admin base view ("/"), ls lists all users from admin_mapping.
- * - In personal directories, ls uses the per-user mapping file.
- * - In shared directories, ls uses the global mapping.
+ * - For admin in base view ("/"), lists all users from admin_mapping.json.
+ * - In personal directories, uses the per-user mapping file.
+ * - In shared directories, uses the global mapping.
  */
 void InteractiveShell::handle_ls() {
     if (currentUser == "admin" && currentDir == "/") {
@@ -343,7 +341,7 @@ void InteractiveShell::handle_ls() {
             std::string privateKey = UOps::UserOps::getUser(currentUser).privateKey;
             json personal = loadUserFileMapping(userRoot, currentUser, privateKey);
             if (personal.contains("files") && personal["files"].contains(hashedName)) {
-                // Entry is stored as [originalName, type].
+                // Each entry is [originalName, type]
                 auto arr = personal["files"][hashedName];
                 displayName = arr[0].get<std::string>();
                 std::string type = arr[1].get<std::string>();
@@ -359,8 +357,8 @@ void InteractiveShell::handle_ls() {
 
 /**
  * handle_cat:
- * Displays decrypted file content.
- * Allowed only in personal or shared directories.
+ * Displays the decrypted contents of a file.
+ * Allowed only in personal and shared directories.
  */
 void InteractiveShell::handle_cat(const std::string &filename) {
     if (filename.empty())
@@ -389,12 +387,11 @@ void InteractiveShell::handle_cat(const std::string &filename) {
  * handle_share:
  * Shares a file from the personal directory with a target user.
  * Process:
- *  - Ensures the command is run inside the personal directory.
- *  - Verifies the file exists.
- *  - Checks that the target user exists in global mapping.
- *  - Locates the target user's shared folder.
- *  - Copies the file (shared file is read-only for recipient).
- *  - Updates the target's "shared_files" mapping in global mapping.
+ *  - Verifies that the file exists and that the current directory is within the personal directory.
+ *  - Checks that the target user exists (via the global mapping).
+ *  - Locates the target user's shared folder using global mapping.
+ *  - Copies the file into the target's shared folder (the file is read-only for the recipient).
+ *  - Updates the target user's "shared_files" entry in the global mapping.
  */
 void InteractiveShell::handle_share(const std::string &args) {
     std::istringstream iss(args);
@@ -422,13 +419,7 @@ void InteractiveShell::handle_share(const std::string &args) {
     std::string targetSharedHash = global[targetUser]["shared"];
     std::string targetDir = FILESYSTEM_DIR + "/" + SecOps::SecurityOps::sha256(targetUser) + "/" + targetSharedHash;
     Ops::FileOps::makeDirectory(targetDir);
-    // Read target user's public key.
-    std::string pubFilePath = "public_keys/" + targetUser + "_public.pem";
-    std::ifstream pubFile(pubFilePath);
-    std::stringstream pubSS;
-    pubSS << pubFile.rdbuf();
-    std::string targetUserPub = pubSS.str();
-    // Copy the file data (shared file is read-only).
+    // (Optional: Encrypt with target's public key; here we simply copy.)
     std::string fileData = Ops::FileOps::readFile(sourceFile);
     std::string hashName = SecOps::SecurityOps::sha256(filename);
     global[targetUser]["shared_files"][hashName] = filename;
@@ -442,9 +433,9 @@ void InteractiveShell::handle_share(const std::string &args) {
  * handle_mkdir:
  * Creates a new directory.
  * Restrictions:
- *  - Allowed only in personal directory and its subdirectories.
- *  - Admin cannot modify user directories (mkdir not allowed in user's view).
- *  - Updates per-user mapping with an entry: { hash: [originalName, "d"] }.
+ *  - Allowed only in the personal directory (or its subdirectories).
+ *  - Admin cannot modify a user's directory (mkdir not allowed in a user's view).
+ *  - Updates the per-user mapping file with an entry: { hash: [originalName, "d"] }.
  */
 void InteractiveShell::handle_mkdir(const std::string &dirname) {
     if (dirname.empty()) {
@@ -482,9 +473,9 @@ void InteractiveShell::handle_mkdir(const std::string &dirname) {
  * handle_mkfile:
  * Creates or overwrites a file.
  * Restrictions:
- *  - Allowed only in personal directory and its subdirectories.
- *  - Admin cannot modify user directories.
- *  - Updates per-user mapping with an entry: { hash: [originalName, "f"] }.
+ *  - Allowed only in the personal directory (or its subdirectories).
+ *  - Admin cannot modify a user's directory (mkfile not allowed in user's view).
+ *  - Updates the per-user mapping file with an entry: { hash: [originalName, "f"] }.
  */
 void InteractiveShell::handle_mkfile(const std::string &args) {
     std::istringstream iss(args);
@@ -532,8 +523,9 @@ void InteractiveShell::handle_mkfile(const std::string &args) {
 /**
  * handle_adduser:
  * Allows admin to add a new user.
- * Checks if the user already exists before creation.
- * Updates admin_mapping.json with the new user's private key.
+ * - Checks user existence.
+ * - Creates the new user.
+ * - Updates the admin mapping file with the new user's private key.
  */
 void InteractiveShell::handle_adduser(const std::string &username) {
     if (currentUser != "admin") {
@@ -565,12 +557,12 @@ void InteractiveShell::handle_adduser(const std::string &username) {
  */
 void InteractiveShell::showHelp() {
     std::cout << "Commands:\n"
-              << "  cd <directory>         - Change directory (cd allowed everywhere; non-admin cannot cd to root)\n"
+              << "  cd <directory>         - Change directory (allowed everywhere; non-admin cannot cd to root)\n"
               << "  pwd                    - Print current directory (for users, root shows as /; admin sees 'filesystem')\n"
               << "  ls                     - List directory contents\n"
               << "  cat <filename>         - Display file contents (allowed only in personal/shared directories)\n"
               << "  share <file> <user>    - Share a file (allowed only in personal directory)\n"
-              << "  mkdir <dirname>        - Create a new directory (allowed only in personal directory)\n"
+              << "  mkdir <dirname>        - Create a directory (allowed only in personal directory)\n"
               << "  mkfile <file> <text>   - Create/overwrite a file (allowed only in personal directory)\n"
               << "  exit                   - Terminate the program\n";
     if (currentUser == "admin")
@@ -579,10 +571,11 @@ void InteractiveShell::showHelp() {
 
 /**
  * start:
- * The main interactive loop. Uses a switch-case to dispatch commands.
+ * The main interactive loop that reads user commands, converts them to enum values,
+ * and dispatches them via a switch-case statement.
  */
 void InteractiveShell::start() {
-    // Mapping from command strings to enum values.
+    // Map command strings to enum values.
     std::unordered_map<std::string, int> cmdMap = {
         {"cd", CMD_CD},
         {"pwd", CMD_PWD},
@@ -606,7 +599,6 @@ void InteractiveShell::start() {
         std::istringstream iss(line);
         std::string cmd;
         iss >> cmd;
-        // Convert command string to enum value.
         int command = CMD_UNKNOWN;
         if (cmdMap.find(cmd) != cmdMap.end())
             command = cmdMap[cmd];
