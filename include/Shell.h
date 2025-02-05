@@ -3,26 +3,36 @@
 
 #include <string>
 
-namespace Shell
-{
-    // Interactive shell with command parsing
+namespace Shell {
+
     class InteractiveShell {
     public:
-        InteractiveShell(const std::string& username);
+        InteractiveShell(const std::string &username);
         void start();
 
     private:
-        std::string currentUser;
-        std::string currentDir;  // We'll store a "home" path for the user
+        std::string currentUser;  // logged in user (e.g., "admin" or a normal user)
+        std::string currentDir;   // virtual current directory, starting at "/" (user root)
 
-        // Command handlers
-        void handleMkdir(const std::string& dirName);
-        void handleCreateFile(const std::string& fileName, const std::string& content);
-        void handleReadFile(const std::string& fileName);
-        void handleShare(const std::string& fileName, const std::string& targetUser);
+        // Helper to resolve a virtual path (e.g., /personal/test.txt) into an absolute path in Fortressfs_Folder.
+        std::string resolvePath(const std::string &vpath);
+
+        // Normalize path (handle . and ..)
+        std::string normalizePath(const std::string &path);
+
+        // Command handlers:
+        void handle_cd(const std::string &arg);
+        void handle_pwd();
+        void handle_ls();
+        void handle_cat(const std::string &filename);
+        void handle_share(const std::string &args);
+        void handle_mkdir(const std::string &dirname);
+        void handle_mkfile(const std::string &args);
+        void handle_adduser(const std::string &username);  // admin only
 
         void showHelp();
     };
+
 }
 
 #endif
