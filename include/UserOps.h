@@ -3,8 +3,9 @@
 
 #include <string>
 #include <unordered_map>
+#include <iostream>
 
-#define USER_OPS_VERSION "1.0.0"
+#define USER_OPS_VERSION "1.0.1"
 
 // Minimal user manager that stores usernames -> public/private keys
 namespace UOps
@@ -14,6 +15,7 @@ namespace UOps
         std::string privateKey;
         std::string publicKey;
         bool isAdmin;
+        int loginAttempts = 0;
     };
 
     class UserOps {
@@ -41,6 +43,13 @@ namespace UOps
         // Attempt login by providing path to private key file
         // Returns the username if login is successful, empty otherwise
         static std::string login(const std::string& privateKeyPath);
+        
+        // Display all users (for debugging purposes)
+        static void listUsers() {
+            for (const auto& pair : users) {
+                std::cout << "User: " << pair.first << ", Admin: " << (pair.second.isAdmin ? "Yes" : "No") << std::endl;
+            }
+        }
 
     private:
         static std::unordered_map<std::string, User> users;
