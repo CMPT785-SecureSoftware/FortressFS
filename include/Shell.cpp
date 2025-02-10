@@ -5,6 +5,7 @@
 #include <iostream>
 #include <sstream>
 #include <filesystem>
+#include <vector>
 
 namespace Shell {
 
@@ -110,7 +111,7 @@ void InteractiveShell::handle_cat(const std::string &filename) {
     // In a full implementation, each user’s file content is encrypted using a symmetric key
     // that is itself encrypted with the user's private key. For brevity, we assume direct AES encryption.
     // We derive an AES key from the user’s private key (for demo, take the first 32 characters).
-    std::string userKey = UOps::getUser(currentUser).privateKey;
+    std::string userKey = UOps::UserOps::getUser(currentUser).privateKey;
     std::string aesKey = userKey.substr(0, 32);  // very naive derivation
     std::string encContent = Ops::FileOps::readFile(realFile);
     try {
@@ -135,7 +136,7 @@ void InteractiveShell::handle_share(const std::string &args) {
         std::cout << "File " << filename << " doesn't exist\n";
         return;
     }
-    if (!UOps::userExists(targetUser)) {
+    if (!UOps::UserOps::userExists(targetUser)) {
         std::cout << "User " << targetUser << " doesn't exist\n";
         return;
     }
@@ -175,7 +176,7 @@ void InteractiveShell::handle_mkfile(const std::string &args) {
     std::getline(iss, content);
     if (!content.empty() && content[0]==' ') content.erase(content.begin());
     // Derive AES key from user's private key (naively)
-    std::string userKey = UOps::getUser(currentUser).privateKey;
+    std::string userKey = UOps::UserOps::getUser(currentUser).privateKey;
     std::string aesKey = userKey.substr(0, 32);
     std::string encContent;
     try {
@@ -198,7 +199,7 @@ void InteractiveShell::handle_adduser(const std::string &username) {
         std::cout << "Usage: adduser <username>\n";
         return;
     }
-    if (!UOps::createUser(username))
+    if (!UOps::UserOps::createUser(username))
         return;
 }
 
