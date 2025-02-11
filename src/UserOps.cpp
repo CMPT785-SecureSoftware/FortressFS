@@ -39,7 +39,101 @@ bool UserOps::createUser(const std::string &username) {
     pubBuf << pubFile.rdbuf();
     std::string userPub = pubBuf.str();
 
-    // Encrypt the user's private key using the admin's symmetric key.
+    // Encrypt the user's private#include "UserOps.h"
+#include "SecurityOps.h"
+#include "FileOps.h"
+
+#include <fstream>
+#include <sstream>
+#include <iostream>
+#include <unordered_map>
+#include <filesystem>
+#include <ctime>
+
+namespace UOps {
+    std::unordered_map<std::string, User> UserOps::users;
+
+    static const std::string FILESYSTEM_DIR = "filesystem";
+    static const std::string ENCRYPTED_KEYS_DIR = FILESYSTEM_DIR + "/EncryptedKeys";
+    static const std::string PUBLIC_KEYS_DIR = "public_keys";
+    static const std::string ADMIN_SYMMETRIC_KEY = "0123456789abcdef0123456789abcdef";
+
+    // Utility function to get the current timestamp
+    std::string getCurrentTimestamp() {
+        std::time_t now = std::time(nullptr);
+        char buf[20];
+        std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
+        return std::string(buf);
+    }
+
+    bool UserOps::createUser(const std::string& username) {
+        if (userExists(username)) {
+            std::cerr << "[" << getCurrentTimestamp() << "] User " << username << " already exists\n";
+            return false;
+        }
+        if (!SecOps::SecurityOps::generateRSAKeyPair(username)) {
+            std::cerr << "[" << getCurrentTimestamp() << "] Failed to generate key pair for " << username << "\n";
+            return false;
+        }
+
+        std::ifstream privFile(username + "_private.pem");
+        std::stringstream privBuf;
+        privBuf << privFile.rdbuf();
+        std::string privateKey = privBuf.str();
+
+        std::ifstream pubFile(username + "_public.pem");
+        std::stringstream pubBuf;
+        pubBuf << pubFile.rdbuf();
+        std::string publicKey = pubBuf.str();
+
+        std::string encryptedUserKey = SecOps::SecurityOps::aesEncrypt(privateKey, ADMIN_SYMMETRIC_KEY);
+        std::string keyfilePath = ENCRYPTED_KEYS_DIR + "/" + username + "_keyfile";
+        if (!Ops::FileOps::writeFile(keyfilePath, encryptedUserKey)) {
+            std::cerr << "[" << getCurrentTimestamp() << "] Failed to write user keyfile\n";
+            return false;
+        }
+
+        std::string userDir = FILESYSTEM_DIR + "/" + username;
+        Ops::FileOps::makeDirectory(userDir + "/personal");
+        Ops::FileOps::makeDirectory(userDir + "/shared");
+        std::string pubDest = PUBLIC_KEYS_DIR + "/" + username + "_public.pem";
+        std::filesystem::rename(username + "_public.pem", pubDest);
+
+        users[username] = User{username, privateKey, publicKey, false};
+        std::cout << "[" << getCurrentTimestamp() << "] Created user: " << username << "\n";
+        return true;
+    }
+
+    bool UserOps::userExists(const std::string& username) {
+        return (users.find(username) != users.end());
+    }
+
+    User UserOps::getUser(const std::string& username) {
+        if (userExists(username)) {
+            return users[username];
+        }
+        std::cerr << "[" << getCurrentTimestamp() << "] Warning: Attempted to retrieve non-existent user: " << username << "\n";
+        return User{"", "", "", false};
+    }
+
+    std::string UserOps::login(const std::string& keyfilePath) {
+        std::string keyData;
+        std::ifstream ifs(keyfilePath, std::ios::binary);
+        if (!ifs) {
+            std::string alt = ENCRYPTED_KEYS_DIR + "/" + keyfilePath;
+            std::ifstream ifs2(alt, std::ios::binary);
+            if (!ifs2)
+                return "";
+            keyData = std::string((std::istreambuf_iterator<char>(ifs2)),
+                                  std::istreambuf_iterator<char>());
+        } else {
+            keyData = std::string((std::istreambuf_iterator<char>(ifs)),
+                                  std::istreambuf_iterator<char>());
+        }
+        if (keyData.empty())
+            return "";
+
+        std::string decrypted; key using the admin's symmetric key.
     std::string encryptedUserKey = SecOps::SecurityOps::aesEncrypt(userPriv, ADMIN_SYMMETRIC_KEY);
 
     // Store the encrypted key in EncryptedKeys as <username>_keyfile.
