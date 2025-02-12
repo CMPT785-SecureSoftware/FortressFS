@@ -9,25 +9,24 @@
 
 namespace Shell {
 
-static const std::string FORTRESS_DIR = "Fortressfs_Folder";
+// Constants for folder paths.
+static const std::string FILESYSTEM_DIR = "filesystem";
+static const std::string ENCRYPTED_KEYS_DIR = FILESYSTEM_DIR + "/EncryptedKeys";
+static const std::string PUBLIC_KEYS_DIR = "public_keys";
+static const std::string ADMIN_SYMMETRIC_KEY = "0123456789abcdef0123456789abcdef";
 
-// In this design, the virtual filesystem for a user is stored under
-//   Fortressfs_Folder/<username>/
-// with subdirectories "personal" and "shared".
-
-// Resolve a virtual path (which starts with '/') into an absolute path.
+// resolvePath() converts a virtual path (e.g., "/personal/test.txt")
+// into an absolute path within FILESYSTEM_DIR/<currentUser>.
 std::string InteractiveShell::resolvePath(const std::string &vpath) {
-    std::string base = FORTRESS_DIR + "/" + currentUser;
+    std::string base = FILESYSTEM_DIR + "/" + currentUser;
     if (vpath == "/" || vpath.empty())
         return base;
-    // Assume vpath starts with '/' (absolute) or is relative.
     if (vpath[0] == '/')
-        return base + vpath;  // e.g., "/personal/test.txt" becomes "Fortressfs_Folder/<user>/personal/test.txt"
-    else
-        return base + "/" + vpath;
+        return base + vpath;
+    return base + "/" + vpath;
 }
 
-// A simple normalizePath to handle "." and ".."
+// normalizePath() handles '.' and '..' components.
 std::string InteractiveShell::normalizePath(const std::string &path) {
     std::vector<std::string> parts;
     std::istringstream iss(path);
@@ -53,8 +52,7 @@ std::string InteractiveShell::normalizePath(const std::string &path) {
 
 InteractiveShell::InteractiveShell(const std::string &username)
     : currentUser(username), currentDir("/") {
-    // Ensure the user's folder exists.
-    std::string userDir = FORTRESS_DIR + "/" + currentUser;
+    std::string userDir = FILESYSTEM_DIR + "/" + currentUser;
     if (!Ops::FileOps::directoryExists(userDir)) {
         Ops::FileOps::makeDirectory(userDir + "/personal");
         Ops::FileOps::makeDirectory(userDir + "/shared");
@@ -62,19 +60,16 @@ InteractiveShell::InteractiveShell(const std::string &username)
 }
 
 void InteractiveShell::handle_cd(const std::string &arg) {
-    if (arg.empty()) return;
+    if (arg.empty())
+        return;
     std::string newPath;
     if (arg[0] == '/')
         newPath = normalizePath(arg);
-    else {
-        // Relative to currentDir.
+    else
         newPath = normalizePath(currentDir + "/" + arg);
-    }
-    // Check if directory exists.
     std::string realPath = resolvePath(newPath);
     if (Ops::FileOps::directoryExists(realPath))
         currentDir = newPath;
-    // If not, remain in current directory.
 }
 
 void InteractiveShell::handle_pwd() {
@@ -87,7 +82,6 @@ void InteractiveShell::handle_ls() {
         std::cout << "Directory does not exist.\n";
         return;
     }
-    // List contents using std::filesystem.
     std::cout << "d -> .\n";
     std::cout << "d -> ..\n";
     for (const auto &entry : std::filesystem::directory_iterator(realDir)) {
@@ -100,19 +94,16 @@ void InteractiveShell::handle_ls() {
 }
 
 void InteractiveShell::handle_cat(const std::string &filename) {
-    if (filename.empty()) return;
+    if (filename.empty())
+        return;
     std::string realFile = resolvePath(filename);
     if (!Ops::FileOps::fileExists(realFile)) {
         std::cout << filename << " doesn't exist\n";
         return;
     }
-    // For simplicity, assume file content is stored encrypted with the user's key.
-    // Here we decrypt it using the user's private key.
-    // In a full implementation, each user’s file content is encrypted using a symmetric key
-    // that is itself encrypted with the user's private key. For brevity, we assume direct AES encryption.
-    // We derive an AES key from the user’s private key (for demo, take the first 32 characters).
+    // Derive AES key from user's private key (naively).
     std::string userKey = UOps::UserOps::getUser(currentUser).privateKey;
-    std::string aesKey = userKey.substr(0, 32);  // very naive derivation
+    std::string aesKey = userKey.substr(0, 32);
     std::string encContent = Ops::FileOps::readFile(realFile);
     try {
         std::string plain = SecOps::SecurityOps::aesDecrypt(encContent, aesKey);
@@ -123,7 +114,6 @@ void InteractiveShell::handle_cat(const std::string &filename) {
 }
 
 void InteractiveShell::handle_share(const std::string &args) {
-    // Format: share <filename> <targetUser>
     std::istringstream iss(args);
     std::string filename, targetUser;
     iss >> filename >> targetUser;
@@ -140,8 +130,7 @@ void InteractiveShell::handle_share(const std::string &args) {
         std::cout << "User " << targetUser << " doesn't exist\n";
         return;
     }
-    // Copy file into target user's /shared folder.
-    std::string targetDir = FORTRESS_DIR + "/" + targetUser + "/shared";
+    std::string targetDir = FILESYSTEM_DIR + "/" + targetUser + "/shared";
     Ops::FileOps::makeDirectory(targetDir);
     std::string targetFile = targetDir + "/" + filename.substr(filename.find_last_of('/') + 1);
     std::string data = Ops::FileOps::readFile(sourceFile);
@@ -164,7 +153,6 @@ void InteractiveShell::handle_mkdir(const std::string &dirname) {
 }
 
 void InteractiveShell::handle_mkfile(const std::string &args) {
-    // Format: mkfile <filename> <contents>
     std::istringstream iss(args);
     std::string filename;
     iss >> filename;
@@ -174,8 +162,9 @@ void InteractiveShell::handle_mkfile(const std::string &args) {
     }
     std::string content;
     std::getline(iss, content);
-    if (!content.empty() && content[0]==' ') content.erase(content.begin());
-    // Derive AES key from user's private key (naively)
+    if (!content.empty() && content[0]==' ')
+        content.erase(content.begin());
+    // Derive AES key from user's private key (naively).
     std::string userKey = UOps::UserOps::getUser(currentUser).privateKey;
     std::string aesKey = userKey.substr(0, 32);
     std::string encContent;
@@ -190,7 +179,6 @@ void InteractiveShell::handle_mkfile(const std::string &args) {
 }
 
 void InteractiveShell::handle_adduser(const std::string &username) {
-    // Only admin can use this.
     if (currentUser != "admin") {
         std::cout << "Forbidden: Only admin can add users\n";
         return;
@@ -199,8 +187,37 @@ void InteractiveShell::handle_adduser(const std::string &username) {
         std::cout << "Usage: adduser <username>\n";
         return;
     }
-    if (!UOps::UserOps::createUser(username))
+    UOps::UserOps::createUser(username);
+}
+
+// Updated: handle_exportkey() now writes the exported key as a PEM file in the current directory.
+void InteractiveShell::handle_exportkey(const std::string &username) {
+    if (currentUser != "admin") {
+        std::cout << "Forbidden: Only admin can export user keys\n";
         return;
+    }
+    if (username.empty()) {
+        std::cout << "Usage: exportkey <username>\n";
+        return;
+    }
+    std::string keyfilePath = ENCRYPTED_KEYS_DIR + "/" + username + "_keyfile";
+    if (!Ops::FileOps::fileExists(keyfilePath)) {
+        std::cout << "Keyfile for user " << username << " does not exist.\n";
+        return;
+    }
+    std::string encKey = Ops::FileOps::readFile(keyfilePath);
+    try {
+        // Decrypt the user's private key.
+        std::string userPriv = SecOps::SecurityOps::aesDecrypt(encKey, ADMIN_SYMMETRIC_KEY);
+        // Export the key to a PEM file in the current directory.
+        std::string outFilename = username + "_keyfile.pem";
+        if (Ops::FileOps::writeFile(outFilename, userPriv))
+            std::cout << "Exported key to " << outFilename << "\n";
+        else
+            std::cout << "Failed to export key.\n";
+    } catch (std::exception &e) {
+        std::cout << "Error exporting key: " << e.what() << "\n";
+    }
 }
 
 void InteractiveShell::showHelp() {
@@ -209,27 +226,32 @@ void InteractiveShell::showHelp() {
               << "  pwd                    - Print current working directory\n"
               << "  ls                     - List files and directories\n"
               << "  cat <filename>         - Display decrypted contents of a file\n"
-              << "  share <file> <user>    - Share file with target user (read-only in their /shared)\n"
+              << "  share <file> <user>    - Share file with target user (copies file to target's shared folder)\n"
               << "  mkdir <dirname>        - Create a new directory\n"
               << "  mkfile <file> <text>   - Create or overwrite a file with contents\n"
               << "  exit                   - Terminate the program\n";
-    if (currentUser == "admin")
-        std::cout << "  adduser <username>     - Create a new user (admin only)\n";
+    if (currentUser == "admin") {
+        std::cout << "  adduser <username>     - Create a new user (admin only)\n"
+                  << "  exportkey <username>   - Export a user's private key as <username>_keyfile.pem (admin only)\n";
+    }
 }
 
 void InteractiveShell::start() {
     std::string line;
     while (true) {
-        std::cout << "[" << currentUser << " @FortressFS:" << currentDir << "]$ ";
-        if (!std::getline(std::cin, line)) break;
-        if (line.empty()) continue;
+        std::cout << "[" << currentUser << " @filesystem:" << currentDir << "]$ ";
+        if (!std::getline(std::cin, line))
+            break;
+        if (line.empty())
+            continue;
         std::istringstream iss(line);
         std::string cmd;
         iss >> cmd;
         if (cmd == "cd") {
             std::string arg;
             std::getline(iss, arg);
-            if (!arg.empty() && arg[0]==' ') arg.erase(arg.begin());
+            if (!arg.empty() && arg[0]==' ')
+                arg.erase(arg.begin());
             handle_cd(arg);
         } else if (cmd == "pwd") {
             handle_pwd();
@@ -242,7 +264,8 @@ void InteractiveShell::start() {
         } else if (cmd == "share") {
             std::string rest;
             std::getline(iss, rest);
-            if (!rest.empty() && rest[0]==' ') rest.erase(rest.begin());
+            if (!rest.empty() && rest[0]==' ')
+                rest.erase(rest.begin());
             handle_share(rest);
         } else if (cmd == "mkdir") {
             std::string dirname;
@@ -251,12 +274,17 @@ void InteractiveShell::start() {
         } else if (cmd == "mkfile") {
             std::string rest;
             std::getline(iss, rest);
-            if (!rest.empty() && rest[0]==' ') rest.erase(rest.begin());
+            if (!rest.empty() && rest[0]==' ')
+                rest.erase(rest.begin());
             handle_mkfile(rest);
         } else if (cmd == "adduser") {
             std::string uname;
             iss >> uname;
             handle_adduser(uname);
+        } else if (cmd == "exportkey") {
+            std::string uname;
+            iss >> uname;
+            handle_exportkey(uname);
         } else if (cmd == "exit") {
             break;
         } else if (cmd == "help") {
