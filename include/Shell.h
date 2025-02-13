@@ -28,7 +28,8 @@ namespace Shell {
         void handle_share(const std::string &args);
         void handle_mkdir(const std::string &dirname);
         void handle_mkfile(const std::string &args);
-        void handle_adduser(const std::string &username);  // admin only
+        void handle_adduser(const std::string &username);  // Admin-only: create a new user.
+        void handle_exportkey(const std::string &username); // Admin-only: export a user's key as a PEM file.
 
         void showHelp();
     };
