@@ -18,39 +18,38 @@ static const std::string ADMIN_KEYFILE = "admin_keyfile";              // Admin 
 // If the admin keyfile does not exist in ADMIN_KEYS_DIR, it generates the admin keypair,
 // moves the admin private key to ADMIN_KEYS_DIR, moves the public key to PUBLIC_KEYS_DIR,
 // creates the filesystem structure for admin, and then exits.
+// Define constants for folder structure.
+static const std::string FILESYSTEM_DIR = "filesystem";
+static const std::string ENCRYPTED_KEYS_DIR = FILESYSTEM_DIR + "/EncryptedKeys";
+static const std::string ADMIN_KEYS_DIR = "admin_keys";
+static const std::string PUBLIC_KEYS_DIR = "public_keys";
+// Updated to include .pem extension.
+static const std::string ADMIN_KEYFILE = "admin_keyfile.pem";
+
 static void initFortress() {
-    // Create the main filesystem folder.
+    // Create required directories.
     if (!std::filesystem::exists(FILESYSTEM_DIR))
         std::filesystem::create_directories(FILESYSTEM_DIR);
-    
-    // Create the EncryptedKeys folder for user keyfiles.
     if (!std::filesystem::exists(ENCRYPTED_KEYS_DIR))
         std::filesystem::create_directories(ENCRYPTED_KEYS_DIR);
-    
-    // Create the admin_keys folder.
     if (!std::filesystem::exists(ADMIN_KEYS_DIR))
         std::filesystem::create_directories(ADMIN_KEYS_DIR);
-    
-    // Create the public_keys folder.
     if (!std::filesystem::exists(PUBLIC_KEYS_DIR))
         std::filesystem::create_directories(PUBLIC_KEYS_DIR);
     
-    // Path for the admin keyfile in admin_keys.
+    // Admin keyfile stored in admin_keys with .pem extension.
     std::string adminPath = ADMIN_KEYS_DIR + "/" + ADMIN_KEYFILE;
-    
-    // If admin keyfile does not exist, create it.
     if (!std::filesystem::exists(adminPath)) {
-        // Generate admin's RSA key pair.
         if (!SecOps::SecurityOps::generateRSAKeyPair("admin")) {
             std::cerr << "Failed to generate admin key pair\n";
             exit(1);
         }
-        // Read the generated admin private key (from "admin_private.pem").
+        // Read admin's private key from "admin_private.pem".
         std::ifstream ifs("admin_private.pem");
         std::stringstream ss;
         ss << ifs.rdbuf();
         std::string adminPriv = ss.str();
-        // Write admin's private key (plaintext) to the admin_keys folder.
+        // Write the admin private key to admin_keys/admin_keyfile.pem.
         std::ofstream ofs(adminPath, std::ios::binary);
         ofs << adminPriv;
         ofs.close();
@@ -58,14 +57,14 @@ static void initFortress() {
         std::string pubSrc = "admin_public.pem";
         std::string pubDst = PUBLIC_KEYS_DIR + "/admin_public.pem";
         std::filesystem::rename(pubSrc, pubDst);
-        // Create admin's filesystem folder (inside FILESYSTEM_DIR).
+        // Create admin's filesystem folder.
         std::filesystem::create_directories(FILESYSTEM_DIR + "/admin/personal");
         std::filesystem::create_directories(FILESYSTEM_DIR + "/admin/shared");
-        // Add admin to the in-memory user table.
+        // Add admin to in-memory table.
         UOps::UserOps::users["admin"] = UOps::User{"admin", adminPriv, "", true};
-        std::cout << "Admin keys created and stored in " << adminPath << "\n";
+        std::cout << "Admin user created. Admin keys stored in " << adminPath << "\n";
         std::cout << "Admin public key stored in " << pubDst << "\n";
-        std::cout << "Please secure your admin keyfile. Exiting now. (Re-run the program with a valid keyfile.)\n";
+        std::cout << "Please secure your admin keyfile. Exiting now.\n";
         exit(0);
     }
 }
