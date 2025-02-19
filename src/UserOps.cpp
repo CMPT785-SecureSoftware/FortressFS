@@ -30,11 +30,6 @@ namespace UOps {
             }
         }
         
-        // Check if the user already exists.
-        if (userExists(username)) {
-            std::cout << "User " << username << " already exists\n";
-            return false;
-        }
         // Generate RSA key pair for the user.
         if (!SecOps::SecurityOps::generateRSAKeyPair(username)) {
             std::cout << "Failed to generate key pair for " << username << "\n";
@@ -67,9 +62,6 @@ namespace UOps {
         // Create the user record.
         users[username] = User{username, userPriv, userPub, false};
 
-        std::cout << "Created user: " << username << "\n";
-        std::filesystem::remove(username+"_private.pem");
-        std::filesystem::remove(username+"_public.pem");
 
         return true;
     }
