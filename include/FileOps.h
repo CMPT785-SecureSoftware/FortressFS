@@ -3,29 +3,24 @@
 
 #include <string>
 
-namespace Ops
-{
-    // Abstraction for reading, writing, and listing files
+namespace Ops {
+    // This module wraps basic file and directory operations using the C++17 STL.
     class FileOps {
     public:
-        // Writes plain text data to a file (no encryption in this method).
-        static bool writePlain(const std::string& path, const std::string& data);
+        // Writes data (in binary mode) to the specified file.
+        static bool writeFile(const std::string &path, const std::string &data);
 
-        // Reads plain text data from a file.
-        static std::string readPlain(const std::string& path);
+        // Reads and returns the entire content of the file as a string.
+        static std::string readFile(const std::string &path);
 
-        // Writes AES-encrypted data to a file.
-        static bool writeEncrypted(const std::string& path, const std::string& encryptedData);
+        // Creates a directory and all its parent directories (if they don't exist).
+        static bool makeDirectory(const std::string &path);
 
-        // Read raw file content (used to get encrypted content).
-        static std::string readRaw(const std::string& path);
+        // Returns true if the specified file exists.
+        static bool fileExists(const std::string &path);
 
-        // Directory operations
-        static bool makeDirectory(const std::string& path);
-
-        // Utility
-        static bool fileExists(const std::string& path);
-        static bool directoryExists(const std::string& path);
+        // Returns true if the specified directory exists.
+        static bool directoryExists(const std::string &path);
     };
 }
 
