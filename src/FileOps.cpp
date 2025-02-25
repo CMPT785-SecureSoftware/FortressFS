@@ -1,40 +1,31 @@
 #include "FileOps.h"
-#include <filesystem>
 #include <fstream>
-#include <iostream>
+#include <filesystem>
 
 namespace Ops {
 
-bool FileOps::writePlain(const std::string& path, const std::string& data) {
-    std::ofstream out(path, std::ios::binary);
-    if (!out) return false;
-    out.write(data.c_str(), data.size());
+bool FileOps::writeFile(const std::string &path, const std::string &data) {
+    // Open the file in binary mode for writing.
+    std::ofstream ofs(path, std::ios::binary);
+    if (!ofs)
+        return false;
+    ofs.write(data.data(), data.size());
     return true;
 }
 
-std::string FileOps::readPlain(const std::string& path) {
-    std::ifstream in(path, std::ios::binary);
-    if (!in) return "";
-    std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    return content;
+std::string FileOps::readFile(const std::string &path) {
+    // Open the file in binary mode for reading.
+    std::ifstream ifs(path, std::ios::binary);
+    if (!ifs)
+        return "";
+    // Read the entire file into a string.
+    return std::string((std::istreambuf_iterator<char>(ifs)),
+                       std::istreambuf_iterator<char>());
 }
 
-bool FileOps::writeEncrypted(const std::string& path, const std::string& encryptedData) {
-    std::ofstream out(path, std::ios::binary);
-    if (!out) return false;
-    out.write(encryptedData.data(), encryptedData.size());
-    return true;
-}
-
-std::string FileOps::readRaw(const std::string& path) {
-    std::ifstream in(path, std::ios::binary);
-    if (!in) return "";
-    std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    return content;
-}
-
-bool FileOps::makeDirectory(const std::string& path) {
+bool FileOps::makeDirectory(const std::string &path) {
     try {
+        // Uses C++17 filesystem to create directories recursively.
         std::filesystem::create_directories(path);
         return true;
     } catch (...) {
@@ -42,11 +33,13 @@ bool FileOps::makeDirectory(const std::string& path) {
     }
 }
 
-bool FileOps::fileExists(const std::string& path) {
+bool FileOps::fileExists(const std::string &path) {
+    // Check if the path exists and is a regular file.
     return std::filesystem::exists(path) && std::filesystem::is_regular_file(path);
 }
 
-bool FileOps::directoryExists(const std::string& path) {
+bool FileOps::directoryExists(const std::string &path) {
+    // Check if the path exists and is a directory.
     return std::filesystem::exists(path) && std::filesystem::is_directory(path);
 }
 
