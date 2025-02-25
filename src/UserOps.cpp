@@ -5,6 +5,7 @@
 #include <sstream>
 #include <iostream>
 #include <filesystem>
+#include <vector>
 
 namespace UOps {
 
@@ -19,7 +20,7 @@ static const std::string ADMIN_KEYFILE = "admin_keyfile"; // stored in Encrypted
 static const std::string ADMIN_SYMMETRIC_KEY = "0123456789abcdef0123456789abcdef"; // 32 bytes
 
 // Create a new user (called only by admin via adduser).
-bool UserOps::createUser(const std::string &username) {
+bool UOps::UserOps::createUser(const std::string &username) {
     if (userExists(username)) {
         std::cout << "User " << username << " already exists\n";
         return false;
@@ -61,11 +62,11 @@ bool UserOps::createUser(const std::string &username) {
     return true;
 }
 
-bool UserOps::userExists(const std::string &username) {
+bool UOps::UserOps::userExists(const std::string &username) {
     return (users.find(username) != users.end());
 }
 
-User UserOps::getUser(const std::string &username) {
+User UOps::UserOps::getUser(const std::string &username) {
     if (userExists(username)) {
         return users[username];
     }
@@ -74,7 +75,7 @@ User UserOps::getUser(const std::string &username) {
 
 // The login function reads a given keyfile (provided by the user) and decrypts it using the admin's symmetric key.
 // If the keyfile is the admin keyfile, it returns "admin"; otherwise it parses the username.
-std::string UserOps::login(const std::string &keyfilePath) {
+std::string UOps::UserOps::login(const std::string &keyfilePath) {
     std::string keyData = "";
     // Try reading from keyfilePath; if not found, try from ENCRYPTED_KEYS_DIR.
     std::ifstream ifs(keyfilePath, std::ios::binary);
