@@ -1,77 +1,130 @@
 #include "UserOps.h"
 #include "SecurityOps.h"
 #include "FileOps.h"
-
 #include <fstream>
 #include <sstream>
 #include <iostream>
-#include <unordered_map>
+#include <filesystem>
 
 namespace UOps {
-    std::unordered_map<std::string, User> UserOps::users;
 
-    bool UserOps::createUser(const std::string& username, bool admin) {
-        if (userExists(username)) return false;
+std::unordered_map<std::string, User> UserOps::users;
 
-        // generateRSAKeyPair now uses the EVP approach
-        if (!SecOps::SecurityOps::generateRSAKeyPair(username)) {
-            return false;
-        }
+static const std::string FORTRESS_DIR = "Fortressfs_Folder";
+static const std::string ENCRYPTED_KEYS_DIR = FORTRESS_DIR + "/EncryptedKeys";
+static const std::string ADMIN_KEYFILE = "admin_keyfile"; // stored in EncryptedKeys
 
-        // Read newly created keys from disk
-        std::ifstream privFile(username + "_private.pem");
-        std::stringstream privBuf;
-        privBuf << privFile.rdbuf();
-        std::string privateKey = privBuf.str();
+// For demonstration, we assume the admin's symmetric key for encrypting user keyfiles
+// is stored in admin_keyfile (decrypted using OpenSSL routines). Here we use a fixed key.
+static const std::string ADMIN_SYMMETRIC_KEY = "0123456789abcdef0123456789abcdef"; // 32 bytes
 
-        std::ifstream pubFile(username + "_public.pem");
-        std::stringstream pubBuf;
-        pubBuf << pubFile.rdbuf();
-        std::string publicKey = pubBuf.str();
-
-        User u {username, privateKey, publicKey, admin};
-        users[username] = u;
-        return true;
+// Create a new user (called only by admin via adduser).
+bool UserOps::createUser(const std::string &username) {
+    if (userExists(username)) {
+        std::cout << "User " << username << " already exists\n";
+        return false;
     }
-
-    bool UserOps::addUserFromKeys(const std::string& username,
-                                  const std::string& privateKey,
-                                  const std::string& publicKey,
-                                  bool admin) {
-        if (userExists(username)) return false;
-        User u {username, privateKey, publicKey, admin};
-        users[username] = u;
-        return true;
+    // Generate a key pair for the user
+    if (!SecOps::SecurityOps::generateRSAKeyPair(username)) {
+        std::cout << "Failed to generate key pair for " << username << "\n";
+        return false;
     }
+    // Read the generated keys
+    std::ifstream privFile(username + "_private.pem");
+    std::stringstream privBuf;
+    privBuf << privFile.rdbuf();
+    std::string userPriv = privBuf.str();
 
-    bool UserOps::userExists(const std::string& username) {
-        return (users.find(username) != users.end());
+    std::ifstream pubFile(username + "_public.pem");
+    std::stringstream pubBuf;
+    pubBuf << pubFile.rdbuf();
+    std::string userPub = pubBuf.str();
+
+    // Encrypt the user's private key with the admin's symmetric key
+    std::string encryptedUserKey = SecOps::SecurityOps::aesEncrypt(userPriv, ADMIN_SYMMETRIC_KEY);
+
+    // Store the encrypted key in ENCRYPTED_KEYS_DIR as <username>_keyfile
+    std::string keyfilePath = ENCRYPTED_KEYS_DIR + "/" + username + "_keyfile";
+    if (!Ops::FileOps::writeFile(keyfilePath, encryptedUserKey)) {
+        std::cout << "Failed to write user keyfile\n";
+        return false;
     }
+    // Create the user's folder structure: Fortressfs_Folder/<username>/{personal,shared}
+    std::string userDir = FORTRESS_DIR + "/" + username;
+    Ops::FileOps::makeDirectory(userDir + "/personal");
+    Ops::FileOps::makeDirectory(userDir + "/shared");
 
-    User UserOps::getUser(const std::string& username) {
-        if (userExists(username)) {
-            return users[username];
-        }
-        return User{"", "", "", false};
+    // Create a record in memory
+    users[username] = User{username, userPriv, userPub, false};
+
+    std::cout << "Created user: " << username << "\n";
+    return true;
+}
+
+bool UserOps::userExists(const std::string &username) {
+    return (users.find(username) != users.end());
+}
+
+User UserOps::getUser(const std::string &username) {
+    if (userExists(username)) {
+        return users[username];
     }
+    return User{"", "", "", false};
+}
 
-    std::string UserOps::login(const std::string& privateKeyPath) {
-        // Read private key from file
-        std::ifstream in(privateKeyPath);
-        if (!in) {
-            std::cerr << "Could not open key file.\n";
+// The login function reads a given keyfile (provided by the user) and decrypts it using the admin's symmetric key.
+// If the keyfile is the admin keyfile, it returns "admin"; otherwise it parses the username.
+std::string UserOps::login(const std::string &keyfilePath) {
+    std::string keyData = "";
+    // Try reading from keyfilePath; if not found, try from ENCRYPTED_KEYS_DIR.
+    std::ifstream ifs(keyfilePath, std::ios::binary);
+    if (!ifs) {
+        std::string alt = ENCRYPTED_KEYS_DIR + "/" + keyfilePath;
+        std::ifstream ifs2(alt, std::ios::binary);
+        if (!ifs2)
             return "";
-        }
-        std::stringstream buf;
-        buf << in.rdbuf();
-        std::string privateKey = buf.str();
-
-        // Attempt match with known users
-        for (auto& [uname, user] : users) {
-            if (user.privateKey == privateKey) {
-                return uname; // Successful login
-            }
-        }
+        keyData = std::string((std::istreambuf_iterator<char>(ifs2)),
+                              std::istreambuf_iterator<char>());
+    } else {
+        keyData = std::string((std::istreambuf_iterator<char>(ifs)),
+                              std::istreambuf_iterator<char>());
+    }
+    if (keyData.empty())
+        return "";
+    // Decrypt using admin symmetric key
+    std::string decrypted = "";
+    try {
+        decrypted = SecOps::SecurityOps::aesDecrypt(keyData, ADMIN_SYMMETRIC_KEY);
+    } catch (...) {
         return "";
     }
+    // If it equals a fixed admin string (for example "ADMIN_PRIV"), we know it’s admin.
+    if (decrypted == "ADMIN_PRIV") {
+        if (users.find("admin") == users.end()) {
+            users["admin"] = User{"admin", decrypted, "", true};
+        }
+        return "admin";
+    }
+    // Otherwise, assume it is in the format generated by createUser.
+    // We can derive the username by checking which user’s public key file exists.
+    // For simplicity, we assume the keyfile was created as <username>_keyfile.
+    // Extract username from the keyfile name.
+    std::string filename = keyfilePath;
+    size_t pos = filename.find("_keyfile");
+    if (pos != std::string::npos) {
+        std::string uname = filename.substr(0, pos);
+        // Load user record if not already loaded.
+        if (users.find(uname) == users.end()) {
+            // To rebuild, read the user's public key from file.
+            std::ifstream pub(uname + "_public.pem");
+            std::stringstream pubBuf;
+            pubBuf << pub.rdbuf();
+            std::string userPub = pubBuf.str();
+            users[uname] = User{uname, decrypted, userPub, false};
+        }
+        return uname;
+    }
+    return "";
 }
+
+} // namespace UOps
