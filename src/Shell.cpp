@@ -9,14 +9,11 @@
 
 namespace Shell {
 
-// Constants for folder paths.
+// Define the filesystem folder constant.
 static const std::string FILESYSTEM_DIR = "filesystem";
-static const std::string ENCRYPTED_KEYS_DIR = FILESYSTEM_DIR + "/EncryptedKeys";
-static const std::string PUBLIC_KEYS_DIR = "public_keys";
-static const std::string ADMIN_SYMMETRIC_KEY = "0123456789abcdef0123456789abcdef";
 
 // resolvePath() converts a virtual path (e.g., "/personal/test.txt")
-// into an absolute path within FILESYSTEM_DIR/<currentUser>.
+// to an absolute path: FILESYSTEM_DIR/<currentUser>/<vpath>
 std::string InteractiveShell::resolvePath(const std::string &vpath) {
     std::string base = FILESYSTEM_DIR + "/" + currentUser;
     if (vpath == "/" || vpath.empty())
@@ -26,7 +23,7 @@ std::string InteractiveShell::resolvePath(const std::string &vpath) {
     return base + "/" + vpath;
 }
 
-// normalizePath() handles '.' and '..' components.
+// normalizePath() processes a path to handle "." and "..".
 std::string InteractiveShell::normalizePath(const std::string &path) {
     std::vector<std::string> parts;
     std::istringstream iss(path);
@@ -50,6 +47,7 @@ std::string InteractiveShell::normalizePath(const std::string &path) {
     return result;
 }
 
+// Constructor: sets the currentUser and ensures the user folder exists.
 InteractiveShell::InteractiveShell(const std::string &username)
     : currentUser(username), currentDir("/") {
     std::string userDir = FILESYSTEM_DIR + "/" + currentUser;
@@ -101,7 +99,7 @@ void InteractiveShell::handle_cat(const std::string &filename) {
         std::cout << filename << " doesn't exist\n";
         return;
     }
-    // Derive AES key from user's private key (naively).
+    // Derive an AES key from the user's private key (naively: first 32 characters).
     std::string userKey = UOps::UserOps::getUser(currentUser).privateKey;
     std::string aesKey = userKey.substr(0, 32);
     std::string encContent = Ops::FileOps::readFile(realFile);
@@ -114,6 +112,7 @@ void InteractiveShell::handle_cat(const std::string &filename) {
 }
 
 void InteractiveShell::handle_share(const std::string &args) {
+    // Format: share <filename> <targetUser>
     std::istringstream iss(args);
     std::string filename, targetUser;
     iss >> filename >> targetUser;
@@ -153,6 +152,7 @@ void InteractiveShell::handle_mkdir(const std::string &dirname) {
 }
 
 void InteractiveShell::handle_mkfile(const std::string &args) {
+    // Format: mkfile <filename> <contents>
     std::istringstream iss(args);
     std::string filename;
     iss >> filename;
@@ -164,7 +164,7 @@ void InteractiveShell::handle_mkfile(const std::string &args) {
     std::getline(iss, content);
     if (!content.empty() && content[0]==' ')
         content.erase(content.begin());
-    // Derive AES key from user's private key (naively).
+    // Derive an AES key from the user's private key (naively).
     std::string userKey = UOps::UserOps::getUser(currentUser).privateKey;
     std::string aesKey = userKey.substr(0, 32);
     std::string encContent;
@@ -190,35 +190,7 @@ void InteractiveShell::handle_adduser(const std::string &username) {
     UOps::UserOps::createUser(username);
 }
 
-// Updated: handle_exportkey() now writes the exported key as a PEM file in the current directory.
-void InteractiveShell::handle_exportkey(const std::string &username) {
-    if (currentUser != "admin") {
-        std::cout << "Forbidden: Only admin can export user keys\n";
-        return;
-    }
-    if (username.empty()) {
-        std::cout << "Usage: exportkey <username>\n";
-        return;
-    }
-    std::string keyfilePath = ENCRYPTED_KEYS_DIR + "/" + username + "_keyfile";
-    if (!Ops::FileOps::fileExists(keyfilePath)) {
-        std::cout << "Keyfile for user " << username << " does not exist.\n";
-        return;
-    }
-    std::string encKey = Ops::FileOps::readFile(keyfilePath);
-    try {
-        // Decrypt the user's private key.
-        std::string userPriv = SecOps::SecurityOps::aesDecrypt(encKey, ADMIN_SYMMETRIC_KEY);
-        // Export the key to a PEM file in the current directory.
-        std::string outFilename = username + "_keyfile.pem";
-        if (Ops::FileOps::writeFile(outFilename, userPriv))
-            std::cout << "Exported key to " << outFilename << "\n";
-        else
-            std::cout << "Failed to export key.\n";
-    } catch (std::exception &e) {
-        std::cout << "Error exporting key: " << e.what() << "\n";
-    }
-}
+// Since we removed export functionality per the revised plan, we do not include an exportkey command.
 
 void InteractiveShell::showHelp() {
     std::cout << "Commands:\n"
@@ -230,10 +202,8 @@ void InteractiveShell::showHelp() {
               << "  mkdir <dirname>        - Create a new directory\n"
               << "  mkfile <file> <text>   - Create or overwrite a file with contents\n"
               << "  exit                   - Terminate the program\n";
-    if (currentUser == "admin") {
-        std::cout << "  adduser <username>     - Create a new user (admin only)\n"
-                  << "  exportkey <username>   - Export a user's private key as <username>_keyfile.pem (admin only)\n";
-    }
+    if (currentUser == "admin")
+        std::cout << "  adduser <username>     - Create a new user (admin only)\n";
 }
 
 void InteractiveShell::start() {
@@ -281,10 +251,6 @@ void InteractiveShell::start() {
             std::string uname;
             iss >> uname;
             handle_adduser(uname);
-        } else if (cmd == "exportkey") {
-            std::string uname;
-            iss >> uname;
-            handle_exportkey(uname);
         } else if (cmd == "exit") {
             break;
         } else if (cmd == "help") {
