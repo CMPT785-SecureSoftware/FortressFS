@@ -8,23 +8,17 @@
 #include "SecurityOps.h"
 
 // Constants for folder structure.
-static const std::string FILESYSTEM_DIR = "filesystem";              // The encrypted filesystem folder
-static const std::string ENCRYPTED_KEYS_DIR = FILESYSTEM_DIR + "/EncryptedKeys"; // Where encrypted user keyfiles are stored
-static const std::string ADMIN_KEYS_DIR = "admin_keys";                // Where admin keys are stored in plaintext
-static const std::string PUBLIC_KEYS_DIR = "public_keys";              // Where public keys are stored (outside the filesystem)
-static const std::string ADMIN_KEYFILE = "admin_keyfile";              // Admin private key filename in ADMIN_KEYS_DIR
 
 // initFortress() creates the required folder structure.
 // If the admin keyfile does not exist in ADMIN_KEYS_DIR, it generates the admin keypair,
 // moves the admin private key to ADMIN_KEYS_DIR, moves the public key to PUBLIC_KEYS_DIR,
 // creates the filesystem structure for admin, and then exits.
 // Define constants for folder structure.
-static const std::string FILESYSTEM_DIR = "filesystem";
-static const std::string ENCRYPTED_KEYS_DIR = FILESYSTEM_DIR + "/EncryptedKeys";
-static const std::string ADMIN_KEYS_DIR = "admin_keys";
-static const std::string PUBLIC_KEYS_DIR = "public_keys";
-// Updated to include .pem extension.
-static const std::string ADMIN_KEYFILE = "admin_keyfile.pem";
+static const std::string FILESYSTEM_DIR = "filesystem";              // The encrypted filesystem folder
+static const std::string ENCRYPTED_KEYS_DIR = FILESYSTEM_DIR + "/EncryptedKeys"; // Where encrypted user keyfiles are stored
+static const std::string ADMIN_KEYS_DIR = "admin_keys";                // Where admin keys are stored in plaintext
+static const std::string PUBLIC_KEYS_DIR = "public_keys";              // Where public keys are stored (outside the filesystem)             
+static const std::string ADMIN_KEYFILE = "admin_keyfile.pem";          // Admin private key filename in ADMIN_KEYS_DIR
 
 static void initFortress() {
     // Create required directories.
