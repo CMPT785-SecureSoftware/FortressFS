@@ -3,23 +3,23 @@
 
 #include <string>
 
-namespace SecOps 
-{
-    // Contains RSA and AES utilities, now using EVP APIs for RSA
+namespace SecOps {
+
     class SecurityOps {
     public:
-        // Generate a 2048-bit RSA key pair, stored in <username>_private.pem and <username>_public.pem
-        static bool generateRSAKeyPair(const std::string& username);
+        // Generate a 2048-bit RSA key pair (using EVP) and write:
+        //   <username>_private.pem and <username>_public.pem.
+        // These files will later be stored (encrypted) in the EncryptedKeys folder.
+        static bool generateRSAKeyPair(const std::string &username);
 
-        // Optional: RSA encryption/decryption using modern EVP APIs
-        // (Not used by default in this project, but available if needed.)
-        static std::string rsaEncrypt(const std::string& data, const std::string& publicKeyPem);
-        static std::string rsaDecrypt(const std::string& data, const std::string& privateKeyPem);
+        // RSA encryption/decryption using EVP APIs (using OAEP padding)
+        static std::string rsaEncrypt(const std::string &plaintext, const std::string &publicKeyPem);
+        static std::string rsaDecrypt(const std::string &ciphertext, const std::string &privateKeyPem);
 
-        // AES encryption/decryption, unchanged
-        // key must be 32 bytes for AES-256
-        static std::string aesEncrypt(const std::string& plaintext, const std::string& key);
-        static std::string aesDecrypt(const std::string& ciphertext, const std::string& key);
+        // AES-256-CBC encryption/decryption.
+        // The key must be exactly 32 bytes for AES-256.
+        static std::string aesEncrypt(const std::string &plaintext, const std::string &key);
+        static std::string aesDecrypt(const std::string &ciphertext, const std::string &key);
     };
 }
 
