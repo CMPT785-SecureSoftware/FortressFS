@@ -4,38 +4,32 @@
 #include <string>
 #include <unordered_map>
 
-// Minimal user manager that stores usernames -> public/private keys
-namespace UOps
-{
+namespace UOps {
+
     struct User {
         std::string username;
-        std::string privateKey;
-        std::string publicKey;
+        std::string privateKey;  // The decrypted private key (used for file decryption)
+        std::string publicKey;   // Public key (if needed)
         bool isAdmin;
     };
 
     class UserOps {
     public:
-        // Create new user, generate RSA pair
-        static bool createUser(const std::string& username, bool admin=false);
+        // Create a new user (used by admin command adduser)
+        // This generates a new key pair (using SecurityOps) and then encrypts the user's private key
+        // with the admin's key (via AES). The resulting keyfile is stored in the EncryptedKeys folder.
+        static bool createUser(const std::string &username);
 
-        // Add existing user (if keys already exist)
-        static bool addUserFromKeys(const std::string& username,
-                                    const std::string& privateKey,
-                                    const std::string& publicKey,
-                                    bool admin=false);
+        // Check if a user exists in memory
+        static bool userExists(const std::string &username);
 
-        // Check if user exists
-        static bool userExists(const std::string& username);
+        // Retrieve a user record
+        static User getUser(const std::string &username);
 
-        // Retrieve user by username
-        static User getUser(const std::string& username);
+        // Load a user from a keyfile (given the decrypted key)
+        static std::string login(const std::string &keyfilePath);
 
-        // Attempt login by providing path to private key file
-        // Returns the username if login is successful, empty otherwise
-        static std::string login(const std::string& privateKeyPath);
-
-    private:
+        // In-memory user table
         static std::unordered_map<std::string, User> users;
     };
 }
