@@ -3,6 +3,8 @@
 #include "Shell.h"
 #include "FileOps.h"
 #include <filesystem>
+#include <fstream>
+#include "SecurityOps.h"
 
 static const std::string FORTRESS_DIR = "Fortressfs_Folder";
 static const std::string ENCRYPTED_KEYS_DIR = FORTRESS_DIR + "/EncryptedKeys";
@@ -40,7 +42,7 @@ static void initFortress() {
         std::filesystem::create_directories(FORTRESS_DIR + "/admin/personal");
         std::filesystem::create_directories(FORTRESS_DIR + "/admin/shared");
         // Add admin to in-memory user table.
-        UOps::users["admin"] = UOps::User{"admin", adminPriv, "", true};
+        UOps::UserOps::users["admin"] = UOps::UserOps::User{"admin", adminPriv, "", true};
         std::cout << "Admin user created. Please secure the admin keyfile.\n";
     }
 }
@@ -54,7 +56,7 @@ int main(int argc, char **argv) {
 
     // Attempt login using the provided keyfile.
     std::string keyfileName = argv[1];
-    std::string user = UOps::UserOps::login(keyfileName);
+    std::string user = UOps::UserOps::UserOps::login(keyfileName);
     if (user.empty()) {
         std::cout << "Invalid keyfile\n";
         return 1;
