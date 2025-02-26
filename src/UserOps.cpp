@@ -84,9 +84,9 @@ namespace UOps {
         
         json mapping = loadUserMapping();
         // Encrypt the root folder name (we assume the root folder is simply the username).
-        std::string encRoot = SecurityOps::rsaEncrypt(username, userPub);
+        std::string encRoot = SecOps::SecurityOps::rsaEncrypt(username, userPub);
         // Encrypt the shared folder name ("shared").
-        std::string encShared = SecurityOps::rsaEncrypt("shared", userPub);
+        std::string encShared = SecOps::SecurityOps::rsaEncrypt("shared", userPub);
         // Store both in the JSON mapping under the key for this user.
         mapping[username] = json::array({ encRoot, encShared });
         // Write back the JSON file.
@@ -126,7 +126,7 @@ namespace UOps {
             if (!ifs2)
                 return "";
             keyData = std::string((std::istreambuf_iterator<char>(ifs2)),
-                                  std::istreambuf_iterator<f>());
+                                  std::istreambuf_iterator<char>());
         } else {
             keyData = std::string((std::istreambuf_iterator<char>(ifs)),
                                   std::istreambuf_iterator<char>());
@@ -148,7 +148,7 @@ namespace UOps {
         std::string encFolderName = mapping[uname][0]; // Encrypted folder name.
         try {
             // Attempt to decrypt using RSA with the user's private key.
-            std::string decryptedFolder = SecurityOps::rsaDecrypt(encFolderName, keyData);
+            std::string decryptedFolder =  SecOps::SecurityOps::rsaDecrypt(encFolderName, keyData);
             // Compare decryptedFolder with the expected folder name (for example, simply the username).
             if (decryptedFolder != uname) {
                 std::cerr << "Folder name decryption mismatch\n";
@@ -160,9 +160,11 @@ namespace UOps {
         }
         // If all is well, register the user.
         if (users.find(uname) == users.end()) {
-            // Load public key from public_keys folder, etc.
-            // (Similar to previous logic)
-            users[uname] = User{uname, keyData, /*load public key*/, false};
+            std::ifstream pub((std::string("public_keys/") + "/" + uname + "_public.pem").c_str());
+            std::stringstream pubBuf;
+            pubBuf << pub.rdbuf();
+            std::string userPub = pubBuf.str();
+            users[uname] = User{uname, keyData, userPub, false};
         }
         return uname;
     }
