@@ -166,7 +166,7 @@ void InteractiveShell::handle_mkdir(const std::string &dirname) {
     }
     if (!Ops::FileOps::makeDirectory(realDir))
         std::cout << "Failed to create directory\n";
-    // Optionally, update a JSON mapping for subfolder names if needed.
+    
 }
 
 void InteractiveShell::handle_mkfile(const std::string &args) {

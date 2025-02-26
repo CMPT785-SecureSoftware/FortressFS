@@ -31,6 +31,10 @@ namespace UOps {
 
         // In-memory user table
         static std::unordered_map<std::string, User> users;
+
+        // In UserOps.h, inside the UOps namespace and UserOps class
+        static bool mapUser(const std::string &username, const std::string &publicKey);
+
     };
 }
 

@@ -82,19 +82,11 @@ namespace UOps {
         std::cout << "Created user: " << username << "\n";
         std::filesystem::remove(username+"_public.pem");
         
-        json mapping = loadUserMapping();
-        // Encrypt the root folder name (we assume the root folder is simply the username).
-        std::string encRoot = SecOps::SecurityOps::rsaEncrypt(username, userPub);
-        // Encrypt the shared folder name ("shared").
-        std::string encShared = SecOps::SecurityOps::rsaEncrypt("shared", userPub);
-        // Store both in the JSON mapping under the key for this user.
-        mapping[username] = json::array({ encRoot, encShared });
-        // Write back the JSON file.
-        std::ofstream ofs("user_mapping.json");
-        ofs << mapping.dump(4);
-        ofs.close();
-
-
+        // Use the mapUser function to update user_mapping.json.
+        if (!UserOps::mapUser(username, userPub)) {
+            std::cout << "Failed to update user mapping for " << username << "\n";
+            return false;
+        }
         return true;
     }
 
@@ -167,5 +159,27 @@ namespace UOps {
             users[uname] = User{uname, keyData, userPub, false};
         }
         return uname;
+    }
+
+    // mapUser updates the user_mapping.json for a given username.
+    bool UserOps::mapUser(const std::string &username, const std::string &publicKey) {
+        // Load the existing mapping.
+        json mapping;
+        std::ifstream mappingFile("user_mapping.json");
+        if (mappingFile)
+            mappingFile >> mapping;
+        mappingFile.close();
+
+        // Encrypt the root folder (username) and the shared folder ("shared").
+        std::string encRoot = SecOps::SecurityOps::rsaEncrypt(username, publicKey);
+        std::string encShared = SecOps::SecurityOps::rsaEncrypt("shared", publicKey);
+
+        // Store the mapping as an array: [encrypted root, encrypted shared].
+        mapping[username] = json::array({encRoot, encShared});
+
+        // Write back the JSON file.
+        std::ofstream ofs("user_mapping.json");
+        ofs << mapping.dump(4);
+        return ofs.good();
     }
 }

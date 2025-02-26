@@ -6,6 +6,8 @@
 #include "Shell.h"
 #include "FileOps.h"
 #include "SecurityOps.h"
+#include <nlohmann/json.hpp>
+
 
 // Define folder structure constants.
 static const std::string FILESYSTEM_DIR = "filesystem";              // The encrypted filesystem folder for file data
@@ -60,6 +62,17 @@ static void initFortress() {
         // Create admin's filesystem folder (under FILESYSTEM_DIR).
         std::filesystem::create_directories(FILESYSTEM_DIR + "/admin/personal");
         std::filesystem::create_directories(FILESYSTEM_DIR + "/admin/shared");
+
+        std::ifstream pubIfs(pubDst);
+        std::stringstream pubSS;
+        pubSS << pubIfs.rdbuf();
+        std::string adminPub = pubSS.str();
+
+        // Use UserOps to map admin in user_mapping.json.
+        if (!UOps::UserOps::mapUser("admin", adminPub)) {
+            std::cerr << "Failed to map admin in user_mapping.json\n";
+        }
+    
         // Add admin to the in-memory user table.
         UOps::UserOps::users["admin"] = UOps::User{"admin", adminPriv, "", true};
         std::cout << "Admin user created.\n";
