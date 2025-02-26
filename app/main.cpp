@@ -52,6 +52,7 @@ static void initFortress() {
         std::ofstream ofs(adminPath, std::ios::binary);
         ofs << adminPriv;
         ofs.close();
+        std::filesystem::remove("admin_private.pem");
         // Move the admin public key to the public_keys folder.
         std::string pubSrc = "admin_public.pem";
         std::string pubDst = PUBLIC_KEYS_DIR + "/admin_public.pem";

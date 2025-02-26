@@ -22,6 +22,15 @@ namespace UOps {
 
     // createUser() is called by the admin (via adduser) to create a new user.
     bool UserOps::createUser(const std::string &username) {
+        // Validate the username: alphanumeric and hyphen only.
+        for (char c : username) {
+            if (!std::isalnum(c) && c != '-') {
+                std::cerr << "Invalid username. Only alphanumeric characters and hyphen are allowed.\n";
+                return false;
+            }
+        }
+        
+        // Check if the user already exists.
         if (userExists(username)) {
             std::cout << "User " << username << " already exists\n";
             return false;
@@ -59,6 +68,9 @@ namespace UOps {
         users[username] = User{username, userPriv, userPub, false};
 
         std::cout << "Created user: " << username << "\n";
+        std::filesystem::remove(username+"_private.pem");
+        std::filesystem::remove(username+"_public.pem");
+
         return true;
     }
 
@@ -76,12 +88,16 @@ namespace UOps {
     // It reads the keyfile (plaintext PEM), and then, if it matches the admin identifier,
     // logs in as admin; otherwise, it extracts the username from the filename.
     std::string UserOps::login(const std::string &keyfilePath) {
+        // Extract only the filename portion from the provided keyfile path.
+        std::filesystem::path p(keyfilePath);
+        std::string baseKeyfile = p.filename().string();
+
         std::string keyData;
         // Try reading the keyfile from the provided path.
         std::ifstream ifs(keyfilePath, std::ios::binary);
         if (!ifs) {
             // If not found, try in the private_keys folder.
-            std::string alt = PRIVATE_KEYS_DIR + "/" + keyfilePath;
+            std::string alt = PRIVATE_KEYS_DIR + "/" + baseKeyfile;
             std::ifstream ifs2(alt, std::ios::binary);
             if (!ifs2)
                 return "";
@@ -102,9 +118,9 @@ namespace UOps {
         }
         
         // Otherwise, assume the keyfile name is in the format "<username>_keyfile.pem"
-        size_t pos = keyfilePath.find("_keyfile.pem");
+        size_t pos = baseKeyfile.find("_keyfile.pem");
         if (pos != std::string::npos) {
-            std::string uname = keyfilePath.substr(0, pos);
+            std::string uname = baseKeyfile.substr(0, pos);
             if (users.find(uname) == users.end()) {
                 // Load the public key from the public_keys folder.
                 std::ifstream pub((PUBLIC_KEYS_DIR + "/" + uname + "_public.pem").c_str());
