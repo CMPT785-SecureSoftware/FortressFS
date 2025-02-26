@@ -75,7 +75,7 @@ void InteractiveShell::handle_pwd() {
 }
 
 void InteractiveShell::handle_ls() {
-    std::string realDir = resolvePath(currentDir);
+    std::string realDir = resolvePath("");
     if (!Ops::FileOps::directoryExists(realDir)) {
         std::cout << "Directory does not exist.\n";
         return;
@@ -83,13 +83,20 @@ void InteractiveShell::handle_ls() {
     std::cout << "d -> .\n";
     std::cout << "d -> ..\n";
     for (const auto &entry : std::filesystem::directory_iterator(realDir)) {
-        std::string name = entry.path().filename().string();
+        std::string encName = entry.path().filename().string();
+        std::string decName;
+        try {
+            decName = SecOps::SecurityOps::rsaDecrypt(encName, UOps::UserOps::getUser(currentUser).privateKey);
+        } catch (...) {
+            decName = encName; // Fallback if decryption fails.
+        }
         if (entry.is_directory())
-            std::cout << "d -> " << name << "\n";
+            std::cout << "d -> " << decName << "\n";
         else
-            std::cout << "f -> " << name << "\n";
+            std::cout << "f -> " << decName << "\n";
     }
 }
+
 
 void InteractiveShell::handle_cat(const std::string &filename) {
     if (filename.empty())
@@ -142,13 +149,24 @@ void InteractiveShell::handle_mkdir(const std::string &dirname) {
         std::cout << "Usage: mkdir <directory_name>\n";
         return;
     }
-    std::string realDir = resolvePath(dirname);
+    // Encrypt the folder name using the user's public key.
+    std::string userPub = UOps::UserOps::getUser(currentUser).publicKey;
+    std::string encName;
+    try {
+        encName = SecOps::SecurityOps::rsaEncrypt(dirname, userPub);
+    } catch (std::exception &e) {
+        std::cout << "Error encrypting folder name: " << e.what() << "\n";
+        return;
+    }
+    // Create the folder using the encrypted name.
+    std::string realDir = resolvePath(encName);
     if (Ops::FileOps::directoryExists(realDir)) {
         std::cout << "Directory already exists\n";
         return;
     }
     if (!Ops::FileOps::makeDirectory(realDir))
         std::cout << "Failed to create directory\n";
+    // Optionally, update a JSON mapping for subfolder names if needed.
 }
 
 void InteractiveShell::handle_mkfile(const std::string &args) {

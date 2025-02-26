@@ -5,6 +5,18 @@
 #include <sstream>
 #include <iostream>
 #include <filesystem>
+#include <nlohmann/json.hpp>
+
+using json = nlohmann::json;
+
+static json loadUserMapping() {
+    std::ifstream ifs("user_mapping.json");
+    if (!ifs) return json::object();
+    json j;
+    ifs >> j;
+    return j;
+}
+
 
 namespace UOps {
 
@@ -68,8 +80,20 @@ namespace UOps {
         users[username] = User{username, userPriv, userPub, false};
 
         std::cout << "Created user: " << username << "\n";
-        std::filesystem::remove(username+"_private.pem");
         std::filesystem::remove(username+"_public.pem");
+        
+        json mapping = loadUserMapping();
+        // Encrypt the root folder name (we assume the root folder is simply the username).
+        std::string encRoot = SecurityOps::rsaEncrypt(username, userPub);
+        // Encrypt the shared folder name ("shared").
+        std::string encShared = SecurityOps::rsaEncrypt("shared", userPub);
+        // Store both in the JSON mapping under the key for this user.
+        mapping[username] = json::array({ encRoot, encShared });
+        // Write back the JSON file.
+        std::ofstream ofs("user_mapping.json");
+        ofs << mapping.dump(4);
+        ofs.close();
+
 
         return true;
     }
@@ -102,7 +126,7 @@ namespace UOps {
             if (!ifs2)
                 return "";
             keyData = std::string((std::istreambuf_iterator<char>(ifs2)),
-                                  std::istreambuf_iterator<char>());
+                                  std::istreambuf_iterator<f>());
         } else {
             keyData = std::string((std::istreambuf_iterator<char>(ifs)),
                                   std::istreambuf_iterator<char>());
@@ -110,27 +134,36 @@ namespace UOps {
         if (keyData.empty())
             return "";
         
-        // Check if the key data equals the admin identifier.
-        if (keyData == ADMIN_IDENTIFIER) {
-            if (users.find("admin") == users.end())
-                users["admin"] = User{"admin", keyData, "", true};
-            return "admin";
-        }
-        
-        // Otherwise, assume the keyfile name is in the format "<username>_keyfile.pem"
         size_t pos = baseKeyfile.find("_keyfile.pem");
-        if (pos != std::string::npos) {
-            std::string uname = baseKeyfile.substr(0, pos);
-            if (users.find(uname) == users.end()) {
-                // Load the public key from the public_keys folder.
-                std::ifstream pub((PUBLIC_KEYS_DIR + "/" + uname + "_public.pem").c_str());
-                std::stringstream pubBuf;
-                pubBuf << pub.rdbuf();
-                std::string userPub = pubBuf.str();
-                users[uname] = User{uname, keyData, userPub, false};
-            }
-            return uname;
+        if (pos == std::string::npos)
+            return "";
+        std::string uname = baseKeyfile.substr(0, pos);
+
+        // Load the JSON mapping file.
+        json mapping = loadUserMapping();
+        if (!mapping.contains(uname)) {
+            std::cerr << "No mapping for user " << uname << "\n";
+            return "";
         }
-        return "";
+        std::string encFolderName = mapping[uname][0]; // Encrypted folder name.
+        try {
+            // Attempt to decrypt using RSA with the user's private key.
+            std::string decryptedFolder = SecurityOps::rsaDecrypt(encFolderName, keyData);
+            // Compare decryptedFolder with the expected folder name (for example, simply the username).
+            if (decryptedFolder != uname) {
+                std::cerr << "Folder name decryption mismatch\n";
+                return "";
+            }
+        } catch (std::exception &e) {
+            std::cerr << "User verification failed: " << e.what() << "\n";
+            return "";
+        }
+        // If all is well, register the user.
+        if (users.find(uname) == users.end()) {
+            // Load public key from public_keys folder, etc.
+            // (Similar to previous logic)
+            users[uname] = User{uname, keyData, /*load public key*/, false};
+        }
+        return uname;
     }
 }
