@@ -13,23 +13,22 @@ A secure filesystem with key-based authentication, enforced access control, and 
 # How to Run
 ## First Run (Admin Setup):
 On the first run, if no admin keyfile exists, the program creates the necessary folder structure and generates the admin key pair. Run:
-'''bash
+```bash
 ./fortressfs <any_keyfile>
-'''bash
+```
 The program will create the admin user, move the generated keyfile to the admin_keys directory, and then exit. Secure the admin keyfile found in admin_keys/admin_keyfile.pem.
 
 ## Subsequent Runs (User Login):
 Log in with your keyfile. For example:
 
 ### For admin:
-'''bash
+```bash
 ./fortressfs .<location>/admin_keyfile.pem
-'''bash
 For a regular user:
-'''bash
+```
+```bash
 ./fortressfs .<location>/<username>_keyfile.pem
-'''bash
-
+```
 # Available Commands
 Once logged in, the interactive shell provides the following commands:
 
