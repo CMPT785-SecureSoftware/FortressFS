@@ -9,12 +9,21 @@
 
 using json = nlohmann::json;
 
-static json loadUserMapping() {
-    std::ifstream ifs("user_mapping.json");
-    if (!ifs) return json::object();
-    json j;
-    ifs >> j;
-    return j;
+namespace {
+    // Load the global mapping (combined from old user_mapping and naming mapping).
+    static json loadGlobalMapping() {
+        std::ifstream ifs("global_mapping.json");
+        if (!ifs) return json::object();
+        json j;
+        ifs >> j;
+        return j;
+    }
+    // Save the global mapping.
+    static bool saveGlobalMapping(const json &j) {
+        std::ofstream ofs("global_mapping.json");
+        ofs << j.dump(4);
+        return ofs.good();
+    }
 }
 
 
@@ -82,7 +91,23 @@ namespace UOps {
         std::cout << "Created user: " << username << "\n";
         std::filesystem::remove(username+"_public.pem");
         
-        // Use the mapUser function to update user_mapping.json.
+        // Create the per-user file mapping (for personal folder) in the user's root.
+        // This file will contain at least: {"username": "<username>", "files": {} }
+        json userMapping;
+        userMapping["username"] = username;
+        userMapping["files"] = json::object();
+        std::string mappingStr = userMapping.dump(4);
+        // Encrypt the mapping string with the user's public key.
+        std::string encryptedMapping = SecOps::SecurityOps::rsaEncrypt(mappingStr, userPub);
+        // Store this file in the user's root folder.
+        std::string userRootDir = "filesystem/" + SecOps::SecurityOps::sha256(username);
+        std::filesystem::create_directories(userRootDir);
+        // Compute the mapping file name as the hash of "<username>_file_mapping.json".
+        std::string mappingFileName = SecOps::SecurityOps::sha256(username + "_file_mapping.json");
+        std::string mappingFilePath = userRootDir + "/" + mappingFileName;
+        Ops::FileOps::writeFile(mappingFilePath, encryptedMapping);
+
+        // Use the mapUser function to update global_mapping.json.
         if (!UserOps::mapUser(username, userPub)) {
             std::cout << "Failed to update user mapping for " << username << "\n";
             return false;
@@ -90,19 +115,16 @@ namespace UOps {
         return true;
     }
 
-    bool UserOps::userExists(const std::string &username) {
-        return (users.find(username) != users.end());
-    }
-
+    // getUser returns the in-memory record.
     User UserOps::getUser(const std::string &username) {
-        if (userExists(username))
+        if (users.find(username) != users.end())
             return users[username];
         return User{"", "", "", false};
     }
 
     // login() attempts to log in using the provided keyfile.
-    // It reads the keyfile (plaintext PEM), and then, if it matches the admin identifier,
-    // logs in as admin; otherwise, it extracts the username from the filename.
+    // It reads the keyfile (plaintext PEM), and then, if successful,
+    // then reading and decrypting the user_file_mapping.json from the user's root.
     std::string UserOps::login(const std::string &keyfilePath) {
         // Extract only the filename portion from the provided keyfile path.
         std::filesystem::path p(keyfilePath);
@@ -131,23 +153,34 @@ namespace UOps {
             return "";
         std::string uname = baseKeyfile.substr(0, pos);
 
-        // Load the JSON mapping file.
-        json mapping = loadUserMapping();
-        if (!mapping.contains(uname)) {
-            std::cerr << "No mapping for user " << uname << "\n";
+        // Determine the path for the user's mapping file.
+        std::string userRootDir = "filesystem/" + SecOps::SecurityOps::sha256(uname);
+        // Compute the mapping file name as the hash of "<username>_file_mapping.json".
+        std::string mappingFileName = SecOps::SecurityOps::sha256(username + "_file_mapping.json");
+        std::string mappingFilePath = userRootDir + "/" + mappingFileName;
+        if (!std::filesystem::exists(mappingFilePath)) {
+            std::cerr << "User mapping file not found for " << uname << "\n";
             return "";
         }
-        std::string encFolderName = mapping[uname][0]; // Encrypted folder name.
+        std::string encryptedMapping = Ops::FileOps::readFile(mappingFilePath);
+        std::string decryptedMapping;
         try {
-            // Attempt to decrypt using RSA with the user's private key.
-            std::string decryptedFolder =  SecOps::SecurityOps::rsaDecrypt(encFolderName, keyData);
-            // Compare decryptedFolder with the expected folder name (for example, simply the username).
-            if (decryptedFolder != uname) {
-                std::cerr << "Folder name decryption mismatch\n";
-                return "";
-            }
+            decryptedMapping = SecOps::SecurityOps::rsaDecrypt(encryptedMapping, keyData);
         } catch (std::exception &e) {
-            std::cerr << "User verification failed: " << e.what() << "\n";
+            std::cerr << "User mapping decryption failed: " << e.what() << "\n";
+            return "";
+        }
+        // Parse the decrypted JSON.
+        json mapping;
+        try {
+            mapping = json::parse(decryptedMapping);
+        } catch (...) {
+            std::cerr << "Failed to parse user mapping JSON\n";
+            return "";
+        }
+        // Check that the mapping file confirms the username.
+        if (!mapping.contains("username") || mapping["username"] != uname) {
+            std::cerr << "User mapping does not match for " << uname << "\n";
             return "";
         }
         // If all is well, register the user.
@@ -161,25 +194,16 @@ namespace UOps {
         return uname;
     }
 
-    // mapUser updates the user_mapping.json for a given username.
+    // mapUser updates the global mapping (global_mapping.json) for a given user.
+    // It stores the hashed root and hashed shared folder names.
     bool UserOps::mapUser(const std::string &username, const std::string &publicKey) {
-        // Load the existing mapping.
-        json mapping;
-        std::ifstream mappingFile("user_mapping.json");
-        if (mappingFile)
-            mappingFile >> mapping;
-        mappingFile.close();
-
-        // Encrypt the root folder (username) and the shared folder ("shared").
-        std::string encRoot = SecOps::SecurityOps::rsaEncrypt(username, publicKey);
-        std::string encShared = SecOps::SecurityOps::rsaEncrypt("shared", publicKey);
-
-        // Store the mapping as an array: [encrypted root, encrypted shared].
-        mapping[username] = json::array({encRoot, encShared});
-
-        // Write back the JSON file.
-        std::ofstream ofs("user_mapping.json");
-        ofs << mapping.dump(4);
-        return ofs.good();
+        json mapping = loadGlobalMapping();
+        // For each user, store an object with "root", "shared" and an empty "shared_files" mapping.
+        mapping[username] = {
+            { "root", SecOps::SecurityOps::sha256(username) },
+            { "shared", SecOps::SecurityOps::sha256("shared") },
+            { "shared_files", json::object() }
+        };
+        return saveGlobalMapping(mapping);
     }
 }

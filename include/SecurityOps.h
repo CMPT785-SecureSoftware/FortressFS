@@ -20,6 +20,8 @@ namespace SecOps {
         // The key must be exactly 32 bytes for AES-256.
         static std::string aesEncrypt(const std::string &plaintext, const std::string &key);
         static std::string aesDecrypt(const std::string &ciphertext, const std::string &key);
+        // Compute SHA-256 hash of input and return its hex string.
+        static std::string sha256(const std::string &data);
     };
 }
 

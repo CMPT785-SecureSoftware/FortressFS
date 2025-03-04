@@ -21,7 +21,7 @@ namespace UOps {
         static bool createUser(const std::string &username);
 
         // Check if a user exists in memory
-        static bool userExists(const std::string &username);
+        // static bool userExists(const std::string &username);
 
         // Retrieve a user record
         static User getUser(const std::string &username);

@@ -59,22 +59,31 @@ static void initFortress() {
         std::string pubSrc = "admin_public.pem";
         std::string pubDst = PUBLIC_KEYS_DIR + "/admin_public.pem";
         std::filesystem::rename(pubSrc, pubDst);
-        // Create admin's filesystem folder (under FILESYSTEM_DIR).
-        std::filesystem::create_directories(FILESYSTEM_DIR + "/admin/personal");
-        std::filesystem::create_directories(FILESYSTEM_DIR + "/admin/shared");
-
-        std::ifstream pubIfs(pubDst);
-        std::stringstream pubSS;
-        pubSS << pubIfs.rdbuf();
-        std::string adminPub = pubSS.str();
-
-        // Use UserOps to map admin in user_mapping.json.
-        if (!UOps::UserOps::mapUser("admin", adminPub)) {
-            std::cerr << "Failed to map admin in user_mapping.json\n";
-        }
+        // Create admin's hashed filesystem folders.
+        std::string adminDir = FILESYSTEM_DIR + "/" + SecOps::SecurityOps::sha256("admin");
+        std::string personalDir = adminDir + "/" + SecOps::SecurityOps::sha256("personal");
+        std::string sharedDir = adminDir + "/" + SecOps::SecurityOps::sha256("shared");
+        std::filesystem::create_directories(adminDir);
+        std::filesystem::create_directories(personalDir);
+        std::filesystem::create_directories(sharedDir);
+         // Create admin's per-user mapping file.
+        json adminMapping;
+        adminMapping["username"] = "admin";
+        adminMapping["files"] = json::object();
+        std::string mappingStr = adminMapping.dump(4);
+        std::string encryptedMapping = SecOps::SecurityOps::rsaEncrypt(mappingStr, 
+                                         std::ifstream(pubDst).rdbuf() ? std::string(std::istreambuf_iterator<char>(std::ifstream(pubDst)), {}) : "");
+        Ops::FileOps::writeFile(adminDir + "/user_file_mapping.json", encryptedMapping);
+        // Update global mapping for admin.
+        UOps::UserOps::mapUser("admin", std::ifstream(pubDst).rdbuf() ? std::string(std::istreambuf_iterator<char>(std::ifstream(pubDst)), {}) : "");
+        
+        // std::ifstream pubIfs(pubDst);
+        // std::stringstream pubSS;
+        // pubSS << pubIfs.rdbuf();
+        // std::string adminPub = pubSS.str();
     
         // Add admin to the in-memory user table.
-        UOps::UserOps::users["admin"] = UOps::User{"admin", adminPriv, "", true};
+        // UOps::UserOps::users["admin"] = UOps::User{"admin", adminPriv, adminPub, true};
         std::cout << "Admin user created.\n";
         std::cout << "Admin private key stored in " << adminPath << "\n";
         std::cout << "Admin public key stored in " << pubDst << "\n";
@@ -105,8 +114,8 @@ int main(int argc, char **argv) {
     // Ensure the user's filesystem folder exists.
     std::string userDir = FILESYSTEM_DIR + "/" + user;
     if (!std::filesystem::exists(userDir)) {
-        std::filesystem::create_directories(userDir + "/personal");
-        std::filesystem::create_directories(userDir + "/shared");
+        std::cout << "User filesystem not found. Please contact admin.\n";
+        return 1;
     }
 
     // Start the interactive shell.
