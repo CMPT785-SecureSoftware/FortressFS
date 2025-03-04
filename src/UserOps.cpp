@@ -181,7 +181,7 @@ bool UserOps::createUser(const std::string &username) {
     }
     bool adminFlag = (username == "admin");
     users[username] = User{username, userPriv, userPub, adminFlag};
-    std::cout << "Created user: " << username << "\n";
+    //std::cout << "Created user: " << username << "\n";
     return true;
 }
 

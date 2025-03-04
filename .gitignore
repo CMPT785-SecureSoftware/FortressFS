@@ -5,3 +5,4 @@ fortressfs
 filesystem/
 *.pem
 *.json
+*.log
