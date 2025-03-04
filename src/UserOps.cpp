@@ -193,6 +193,7 @@ bool UserOps::createUser(const std::string &username) {
     }
     users[username] = User{username, userPriv, userPub, adminFlag};
     if (username == "admin"){
+        std::cout << "Updating user mapping for admin...\n";
         if (!UOps::UserOps::updateAdminMapping(username, userPriv, userPub)) {
             std::cout << "Failed to update admin mapping.\n";
         }
@@ -308,33 +309,50 @@ bool UserOps::mapUser(const std::string &username, const std::string &publicKey)
  * in the filesystem, encrypted using admin's private key (first 32 bytes used as AES key).
  */
 bool UserOps::updateAdminMapping(const std::string &username, const std::string &userPrivateKey, const std::string &adminPrivateKey) {
+    // The admin mapping file is stored under "filesystem/" with a filename of sha256("admin_mapping.json")
     std::string adminMappingFileName = SecOps::SecurityOps::sha256("admin_mapping.json");
     std::string adminMappingPath = "filesystem/" + adminMappingFileName;
     json adminMapping;
+    
+    // If the admin mapping file exists, decrypt it using hybrid decryption with admin's private key.
     if (Ops::FileOps::fileExists(adminMappingPath)) {
         std::string enc = Ops::FileOps::readFile(adminMappingPath);
-        std::string key = adminPrivateKey.substr(0, 32);
         try {
-            std::string dec = SecOps::SecurityOps::aesDecrypt(enc, key);
+            std::string dec = SecOps::SecurityOps::hybridDecrypt(enc, adminPrivateKey);
             adminMapping = json::parse(dec);
         } catch (...) {
             adminMapping = json::object();
         }
     }
+    // Update mapping: store the new user's private key.
     adminMapping[username] = userPrivateKey;
     std::string plain = adminMapping.dump(4);
-    std::string key = adminPrivateKey.substr(0, 32);
+
+    // Read admin's public key from file.
+    std::ifstream adminPubStream("public_keys/admin_public.pem");
+    if (!adminPubStream) {
+        Ops::FileOps::appendErrorLog("[Debug] updateAdminMapping: failed to open admin public key file");
+        return false;
+    }
+    std::stringstream adminPubBuf;
+    adminPubBuf << adminPubStream.rdbuf();
+    std::string adminPub = adminPubBuf.str();
+    adminPubStream.close();
+
+    // Encrypt the mapping using hybrid encryption with admin's public key.
     std::string encrypted;
     try {
-        encrypted = SecOps::SecurityOps::aesEncrypt(plain, key);
+        encrypted = SecOps::SecurityOps::hybridEncrypt(plain, adminPub);
     } catch(std::exception &e) {
-        Ops::FileOps::appendErrorLog("[Debug] updateAdminMapping: aesEncrypt failed: " + std::string(e.what()));
+        Ops::FileOps::appendErrorLog("[Debug] updateAdminMapping: hybridEncrypt failed: " + std::string(e.what()));
         return false;
     }
     bool success = Ops::FileOps::writeFile(adminMappingPath, encrypted);
     if (!success) {
         Ops::FileOps::appendErrorLog("[Debug] updateAdminMapping: writeFile failed for " + adminMappingPath);
     }
+    if (username=="admin")
+        std::cout << "Admin mapping updated.\n";
     return success;
 }
 

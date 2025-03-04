@@ -335,10 +335,10 @@ void InteractiveShell::handle_ls() {
         json admMap;
         if (Ops::FileOps::fileExists(adminMappingPath)) {
             std::string adminPriv = UOps::UserOps::getUser("admin").privateKey;
-            std::string key = adminPriv.substr(0, 32);
             std::string enc = Ops::FileOps::readFile(adminMappingPath);
             try {
-                std::string dec = SecOps::SecurityOps::aesDecrypt(enc, key);
+                // Use hybridDecrypt with admin's private key to decrypt the mapping.
+                std::string dec = SecOps::SecurityOps::hybridDecrypt(enc, adminPriv);
                 admMap = json::parse(dec);
             } catch(...) {
                 admMap = json::object();
