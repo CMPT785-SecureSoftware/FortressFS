@@ -107,9 +107,10 @@ std::string InteractiveShell::resolvePath(const std::string &vpath) {
     if (vpath.rfind("/shared", 0) == 0) {
         json global = loadGlobalMapping();
         std::string sharedHash;
-        if (global.contains(activeUser) && global[activeUser].contains("shared"))
+        if (global.contains(activeUser) && global[activeUser].contains("shared")){
             sharedHash = global[activeUser]["shared"];
             std::cout << "Shared hash: " << sharedHash << "\n";
+        }
         else
             sharedHash = SecOps::SecurityOps::sha256("shared"); // fallback default
 
