@@ -407,10 +407,6 @@ void InteractiveShell::handle_ls() {
         }
         return;
     }
-    // Fallback: list hashed names.
-    for (auto &entry : std::filesystem::directory_iterator(realDir)) {
-        std::cout << entry.path().filename().string() << "\n";
-    }
 }
 
 /**
@@ -544,7 +540,13 @@ void InteractiveShell::handle_mkdir(const std::string &dirname) {
         return;
     }
     std::cout << "Created directory " << dirname << "\n";
-    // Optionally update user_file_mapping "entries" here.
+    // Update the user_file_mapping "entries" for the active user.
+    std::string activeUser = (currentUser == "admin" && !viewedUser.empty()) ? viewedUser : currentUser;
+    json mapping = UOps::UserOps::loadUserFileMappingPublic(activeUser, UOps::UserOps::getUser(activeUser).privateKey);
+    mapping["entries"][hashed] = { {"name", dirname}, {"type", "d"} };
+    if (!UOps::UserOps::saveUserFileMappingPublic(activeUser, UOps::UserOps::getUser(activeUser).publicKey, mapping)) {
+        std::cout << "Warning: Failed to update directory mapping.\n";
+    }
 }
 
 void InteractiveShell::handle_mkfile(const std::string &args) {
@@ -586,7 +588,13 @@ void InteractiveShell::handle_mkfile(const std::string &args) {
     std::string realFile = realDir + "/" + hashed;
     Ops::FileOps::writeFile(realFile, enc);
     std::cout << "Created file " << filename << "\n";
-    // Optionally update user_file_mapping "entries" here.
+    // Update the user_file_mapping "entries" for the active user.
+    json mapping = UOps::UserOps::loadUserFileMappingPublic(activeUser, UOps::UserOps::getUser(activeUser).privateKey);
+    // Add or update the entry for this file.
+    mapping["entries"][hashed] = { {"name", filename}, {"type", "f"} };
+    if (!UOps::UserOps::saveUserFileMappingPublic(activeUser, UOps::UserOps::getUser(activeUser).publicKey, mapping)) {
+        std::cout << "Warning: Failed to update file mapping.\n";
+    }
 }
 
 void InteractiveShell::handle_adduser(const std::string &username) {
