@@ -5,7 +5,7 @@
 #include <unordered_map>
 #include <nlohmann/json.hpp>
 
-// Create an alias for convenience
+// Create an alias for convenience.
 namespace UOps {
     using json = nlohmann::json;
 
@@ -24,13 +24,11 @@ namespace UOps {
     };
 
     /**
-     * UserOps provides:
+     * UserOps provides functions for user management:
      *  - createUser: Generates key pairs, creates directory structure, and stores mapping.
      *  - login: Logs in a user using a keyfile.
-     *  - getUser: Retrieves a user from the in-memory cache.
-     *  - userExists: Checks if a user exists in the in-memory cache.
-     *  - mapUser: Updates global_mapping.json with user information.
-     *  - updateAdminMapping: Updates admin_mapping.json with a user's private key.
+     *  - getUser / userExists: Manage the in-memory user cache.
+     *  - mapUser / updateAdminMapping: Update global mapping and admin mapping.
      *
      * Additionally, it provides public helper functions to load and save the encrypted
      * user_file_mapping.json.
@@ -67,8 +65,8 @@ namespace UOps {
     private:
         /**
          * createUserFileMapping:
-         * Creates a JSON describing the user's file mapping (root, personal folder, etc.),
-         * then encrypts it with the user's public key and writes it to the user's root folder.
+         * Creates a JSON describing the user's file mapping (e.g., root folder, personal folder, etc.),
+         * encrypts it with the user's public key, and writes it to the user's root folder.
          * The file is named as sha256("user_file_mapping.json") under filesystem/<sha256(username)>.
          */
         static bool createUserFileMapping(const std::string &username, const std::string &userPub);
