@@ -25,6 +25,77 @@ static const std::string PUBLIC_KEYS_DIR  = "public_keys";
  * - mapUser => update global mapping
  * - Add to memory (isAdmin if username=="admin")
  */
+
+/**
+ * getUser:
+ * returns from memory, or empty user if not found
+ */
+User UserOps::getUser(const std::string &username) {
+    auto it = users.find(username);
+    if (it != users.end()) {
+        return it->second;
+    }
+    return User{"", "", "", false};
+}
+
+/**
+ * userExists:
+ * check if user is in memory
+ */
+bool UserOps::userExists(const std::string &username) {
+    return (users.find(username) != users.end());
+}
+
+/**
+ * mapUser:
+ * update global_mapping.json for <username> => root, shared, shared_files
+ */
+bool UserOps::mapUser(const std::string &username, const std::string &publicKey) {
+    json mapping;
+    std::ifstream ifs("global_mapping.json");
+    if (ifs) {
+        ifs >> mapping;
+        ifs.close();
+    }
+    mapping[username] = {
+        {"root", SecOps::SecurityOps::sha256(username)},
+        {"shared", SecOps::SecurityOps::sha256("shared")},
+        {"shared_files", json::object()}
+    };
+    std::ofstream ofs("global_mapping.json");
+    ofs << mapping.dump(4);
+    return ofs.good();
+}
+
+/**
+ * updateAdminMapping:
+ * store user’s private key in the admin_mapping.json. 
+ * That file is named sha256("admin_mapping.json") in filesystem/
+ * encrypted with AES using admin's private key as 32-byte key.
+ */
+bool UserOps::updateAdminMapping(const std::string &username, const std::string &userPrivateKey, const std::string &adminPrivateKey) {
+    std::string adminMappingFileName = SecOps::SecurityOps::sha256("admin_mapping.json");
+    std::string adminMappingPath = "filesystem/" + adminMappingFileName;
+
+    json adminMapping;
+    if (Ops::FileOps::fileExists(adminMappingPath)) {
+        std::string enc = Ops::FileOps::readFile(adminMappingPath);
+        std::string key = adminPrivateKey.substr(0, 32);
+        try {
+            std::string dec = SecOps::SecurityOps::aesDecrypt(enc, key);
+            adminMapping = json::parse(dec);
+        } catch (...) {
+            adminMapping = json::object();
+        }
+    }
+    adminMapping[username] = userPrivateKey;
+
+    std::string plain = adminMapping.dump(4);
+    std::string key = adminPrivateKey.substr(0, 32);
+    std::string encrypted = SecOps::SecurityOps::aesEncrypt(plain, key);
+    return Ops::FileOps::writeFile(adminMappingPath, encrypted);
+}
+
 bool UserOps::createUser(const std::string &username) {
     // For example, check validity
     for (char c : username) {
@@ -182,76 +253,6 @@ std::string UserOps::login(const std::string &keyfilePath) {
     bool adminFlag = (uname == "admin");
     users[uname] = User{uname, keyData, userPub, adminFlag};
     return uname;
-}
-
-/**
- * getUser:
- * returns from memory, or empty user if not found
- */
-User UserOps::getUser(const std::string &username) {
-    auto it = users.find(username);
-    if (it != users.end()) {
-        return it->second;
-    }
-    return User{"", "", "", false};
-}
-
-/**
- * userExists:
- * check if user is in memory
- */
-bool UserOps::userExists(const std::string &username) {
-    return (users.find(username) != users.end());
-}
-
-/**
- * mapUser:
- * update global_mapping.json for <username> => root, shared, shared_files
- */
-bool UserOps::mapUser(const std::string &username, const std::string &publicKey) {
-    json mapping;
-    std::ifstream ifs("global_mapping.json");
-    if (ifs) {
-        ifs >> mapping;
-        ifs.close();
-    }
-    mapping[username] = {
-        {"root", SecOps::SecurityOps::sha256(username)},
-        {"shared", SecOps::SecurityOps::sha256("shared")},
-        {"shared_files", json::object()}
-    };
-    std::ofstream ofs("global_mapping.json");
-    ofs << mapping.dump(4);
-    return ofs.good();
-}
-
-/**
- * updateAdminMapping:
- * store user’s private key in the admin_mapping.json. 
- * That file is named sha256("admin_mapping.json") in filesystem/
- * encrypted with AES using admin's private key as 32-byte key.
- */
-bool UserOps::updateAdminMapping(const std::string &username, const std::string &userPrivateKey, const std::string &adminPrivateKey) {
-    std::string adminMappingFileName = SecOps::SecurityOps::sha256("admin_mapping.json");
-    std::string adminMappingPath = "filesystem/" + adminMappingFileName;
-
-    json adminMapping;
-    if (Ops::FileOps::fileExists(adminMappingPath)) {
-        std::string enc = Ops::FileOps::readFile(adminMappingPath);
-        std::string key = adminPrivateKey.substr(0, 32);
-        try {
-            std::string dec = SecOps::SecurityOps::aesDecrypt(enc, key);
-            adminMapping = json::parse(dec);
-        } catch (...) {
-            adminMapping = json::object();
-        }
-    }
-    adminMapping[username] = userPrivateKey;
-
-    std::string plain = adminMapping.dump(4);
-    std::string key = adminPrivateKey.substr(0, 32);
-    std::string encrypted = SecOps::SecurityOps::aesEncrypt(plain, key);
-    return Ops::FileOps::writeFile(adminMappingPath, encrypted);
 }
 
 } // namespace UOps
