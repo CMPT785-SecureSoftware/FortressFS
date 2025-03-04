@@ -131,6 +131,7 @@ std::string InteractiveShell::resolvePath(const std::string &vpath) {
                 path += "/" + SecOps::SecurityOps::sha256(token);
             }
         }
+        std::cout << "Path: " << path << "\n";
         return path;
     } else {
         std::string base = FILESYSTEM_DIR + "/" + SecOps::SecurityOps::sha256(activeUser);
