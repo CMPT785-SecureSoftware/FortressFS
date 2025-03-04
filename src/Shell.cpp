@@ -479,10 +479,10 @@ void InteractiveShell::handle_mkdir(const std::string &dirname) {
         std::cout << "Usage: mkdir <directory_name>\n";
         return;
     }
-    if (currentUser == "admin" && (!isAdminFSMode || !viewedUser.empty())) {
-        std::cout << "Admin is read-only in user directories. mkdir not allowed.\n";
+    if (currentUser == "admin" && (isAdminFSMode || !viewedUser.empty())) {
+        std::cout << "Admin is read-only in user directories. mkfile not allowed.\n";
         return;
-    }
+    }    
     if (!isInPersonalDirectory(currentDir)) {
         std::cout << "mkdir allowed only in personal directory and its subdirectories.\n";
         return;
