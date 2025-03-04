@@ -19,9 +19,8 @@ static const std::string ADMIN_KEYS_DIR   = "admin_keys"; // For admin's final p
 
 /**
  * createUserFileMapping:
- * Creates a JSON object describing the user_file_mapping (root, personal folder, etc.),
- * then encrypts it using the user's public key and writes it to the user's root folder.
- * The file is named sha256("user_file_mapping.json") under filesystem/<sha256(username)>.
+ * Creates a JSON object describing the user_file_mapping (root folder, personal folder, etc.),
+ * then encrypts it using the user's public key and writes it to userRoot/<sha256("user_file_mapping.json")>.
  */
 bool UserOps::createUserFileMapping(const std::string &username, const std::string &userPub) {
     std::string userRoot = "filesystem/" + SecOps::SecurityOps::sha256(username);
@@ -60,7 +59,6 @@ bool UserOps::createUserFileMapping(const std::string &username, const std::stri
  * Public method to load and decrypt the user's file mapping.
  * Reads the encrypted file from filesystem/<sha256(username)>/<sha256("user_file_mapping.json")>,
  * decrypts it using the provided user private key, and returns the parsed JSON.
- * If any step fails, returns an empty JSON object.
  */
 json UserOps::loadUserFileMappingPublic(const std::string &username, const std::string &userPriv) {
     json empty;
@@ -110,7 +108,7 @@ bool UserOps::saveUserFileMappingPublic(const std::string &username, const std::
         Ops::FileOps::appendErrorLog("[Debug] saveUserFileMappingPublic: rsaEncrypt failed: " + std::string(e.what()));
         return false;
     }
-    if(!Ops::FileOps::writeFile(filePath, encrypted)) {
+    if (!Ops::FileOps::writeFile(filePath, encrypted)) {
         Ops::FileOps::appendErrorLog("[Debug] saveUserFileMappingPublic: writeFile failed for " + filePath);
         return false;
     }
@@ -159,7 +157,7 @@ bool UserOps::createUser(const std::string &username) {
     std::string userPub = pubBuf.str();
     pubFile.close();
 
-    // Move <username>_keyfile.pem to private_keys.
+    // Move keyfile to private_keys.
     std::filesystem::create_directories(PRIVATE_KEYS_DIR);
     std::string keyfilePath = PRIVATE_KEYS_DIR + "/" + username + "_keyfile.pem";
     if (!Ops::FileOps::writeFile(keyfilePath, userPriv)) {
@@ -167,7 +165,7 @@ bool UserOps::createUser(const std::string &username) {
         return false;
     }
 
-    // Move <username>_public.pem to public_keys.
+    // Move public key to public_keys.
     std::filesystem::create_directories(PUBLIC_KEYS_DIR);
     std::string pubDest = PUBLIC_KEYS_DIR + "/" + username + "_public.pem";
     std::filesystem::rename(username + "_public.pem", pubDest);
@@ -206,8 +204,8 @@ bool UserOps::createUser(const std::string &username) {
  * - Reads the entire keyfile.
  * - Extracts the username from the keyfile name (<username>_keyfile.pem).
  * - Loads and decrypts the user_file_mapping using the keyfile content.
- * - Verifies the mapping contains the correct username.
- * - Reads the user's public key.
+ * - Verifies that the mapping contains the correct username.
+ * - Reads the corresponding public key.
  * - Caches the user in memory and returns the username.
  * - Returns an empty string if any step fails.
  */
@@ -285,7 +283,7 @@ User UserOps::getUser(const std::string &username) {
  * Updates global_mapping.json for the given user with:
  * - root: hashed username.
  * - shared: hashed "shared".
- * - shared_files: an empty object for later shared entries.
+ * - shared_files: an empty object for later shared file entries.
  */
 bool UserOps::mapUser(const std::string &username, const std::string &publicKey) {
     json mapping;
@@ -311,7 +309,7 @@ bool UserOps::mapUser(const std::string &username, const std::string &publicKey)
 /**
  * updateAdminMapping:
  * Stores the user's private key in admin_mapping.json (hashed as sha256("admin_mapping.json"))
- * in the filesystem, encrypted with admin's private key (first 32 bytes used as AES key).
+ * in the filesystem, encrypted using admin's private key (first 32 bytes used as the AES key).
  */
 bool UserOps::updateAdminMapping(const std::string &username, const std::string &userPrivateKey, const std::string &adminPrivateKey) {
     std::string adminMappingFileName = SecOps::SecurityOps::sha256("admin_mapping.json");
