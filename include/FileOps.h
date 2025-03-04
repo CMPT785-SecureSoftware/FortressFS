@@ -4,55 +4,50 @@
 #include <string>
 
 /**
- * Namespace Ops encapsulates basic file and directory operations.
+ * Namespace Ops encapsulates basic file and directory I/O operations,
+ * such as reading/writing files and creating/checking directories.
  */
 namespace Ops {
 
     /**
-     * FileOps provides static methods for performing common file operations,
-     * such as reading, writing, and checking for the existence of files or directories,
-     * as well as creating directories.
+     * FileOps offers static methods for reading/writing files and handling directories.
      */
     class FileOps {
     public:
         /**
          * writeFile:
-         * Writes the given data (in binary mode) to the specified file path.
-         * @param path: The path to the file where data will be written.
-         * @param data: The content to write to the file.
-         * @return true if writing succeeds; otherwise, false.
+         * Writes data (in binary mode) to the specified path.
+         * @param path File path.
+         * @param data Content to write.
+         * @return true if successful, false otherwise.
          */
         static bool writeFile(const std::string &path, const std::string &data);
 
         /**
          * readFile:
-         * Reads the entire content of the file specified by path.
-         * @param path: The path to the file.
-         * @return The file content as a string; returns an empty string if the file cannot be opened.
+         * Reads the entire file content from path.
+         * @param path File path.
+         * @return File content. Empty if not found or error.
          */
         static std::string readFile(const std::string &path);
 
         /**
          * makeDirectory:
-         * Creates a directory at the specified path, including all necessary parent directories.
-         * @param path: The directory path to create.
-         * @return true if the directory is successfully created; otherwise, false.
+         * Creates a directory at path (including parents).
+         * @param path Directory path.
+         * @return true if successful, false otherwise.
          */
         static bool makeDirectory(const std::string &path);
 
         /**
          * fileExists:
-         * Checks whether a file exists at the given path.
-         * @param path: The file path.
-         * @return true if the file exists and is a regular file; otherwise, false.
+         * Checks if a path exists and is a regular file.
          */
         static bool fileExists(const std::string &path);
 
         /**
          * directoryExists:
-         * Checks whether a directory exists at the given path.
-         * @param path: The directory path.
-         * @return true if the directory exists; otherwise, false.
+         * Checks if path exists and is a directory.
          */
         static bool directoryExists(const std::string &path);
     };

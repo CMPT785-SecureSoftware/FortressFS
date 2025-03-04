@@ -3,49 +3,34 @@
 
 #include <string>
 
-/**
- * Namespace Shell contains the InteractiveShell class which implements the
- * interactive command-line interface for the fortress file system.
- */
 namespace Shell {
 
     /**
-     * InteractiveShell provides the interactive CLI.
-     * It supports commands such as cd, pwd, ls, cat, share, mkdir, mkfile, and adduser,
-     * and enforces restrictions based on the user's role and current directory.
-     *
-     * For normal users, "/" represents their root (showing only "personal" and "shared").
-     * For admin, additional functionality is provided:
-     *   - Admin starts at his own root.
-     *   - If admin does "cd .." at his own root, he enters the filesystem view
-     *     where pwd outputs "filesystem" and ls lists all users (from admin_mapping.json).
-     *   - In filesystem view, "cd <username>" allows admin to view that user's directory (read-only).
-     *   - Admin cannot modify (mkdir/mkfile/share) files in other users' directories.
+     * InteractiveShell handles the CLI for a user (or admin),
+     * supporting commands: cd, pwd, ls, cat, share, mkdir, mkfile, adduser, exit, help.
+     * It enforces restrictions for normal users and admin roles.
      */
     class InteractiveShell {
     public:
-        // Constructor takes the logged-in user's plaintext username.
+        // Constructor: pass the logged-in username.
         InteractiveShell(const std::string &username);
 
-        // Starts the interactive shell loop.
+        // Begin the interactive loop
         void start();
-    private:
-        std::string currentUser;  // The logged-in user's username.
-        std::string currentDir;   // Virtual current directory.
-                                  // For normal users, "/" is their root.
-                                  // For admin, "/" is initially his root; however, admin may switch
-                                  // between his own view and a filesystem view.
-        // Additional admin state:
-        bool isAdminFSMode;       // true if admin is in the filesystem view (listing all users).
-        std::string viewedUser;   // If non-empty, admin is viewing a specific user's directory (read-only).
 
-        // Converts a virtual (plaintext) path to an on-disk path using hashed names.
+    private:
+        std::string currentUser;  // e.g. "admin", "jeril", ...
+        std::string currentDir;   // e.g. "/", "/personal", ...
+        bool isAdminFSMode;       // admin "filesystem" view
+        std::string viewedUser;   // if admin is viewing user X
+
+        // Convert a virtual path like "/shared/docs" to a hashed on-disk path
         std::string resolvePath(const std::string &vpath);
 
-        // Normalizes a path by resolving "." and ".." components.
+        // Normalize path by interpreting "." and ".."
         std::string normalizePath(const std::string &path);
 
-        // Command handler functions.
+        // Command handlers
         void handle_cd(const std::string &arg);
         void handle_pwd();
         void handle_ls();
@@ -54,9 +39,11 @@ namespace Shell {
         void handle_mkdir(const std::string &dirname);
         void handle_mkfile(const std::string &args);
         void handle_adduser(const std::string &username);
+
+        // Show commands depending on user role and directory
         void showHelp();
     };
 
-} // namespace Shell
+}
 
 #endif
