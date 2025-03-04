@@ -37,4 +37,15 @@ bool FileOps::directoryExists(const std::string &path) {
     return std::filesystem::exists(path) && std::filesystem::is_directory(path);
 }
 
+/**
+ * appendErrorLog:
+ * Appends 'message' to error.log
+ */
+void FileOps::appendErrorLog(const std::string &message) {
+    std::ofstream ofs("error.log", std::ios::app);
+    if (ofs) {
+        ofs << message << "\n";
+    }
+}
+
 } // namespace Ops

@@ -9,9 +9,6 @@
  */
 namespace Ops {
 
-    /**
-     * FileOps offers static methods for reading/writing files and handling directories.
-     */
     class FileOps {
     public:
         /**
@@ -50,6 +47,13 @@ namespace Ops {
          * Checks if path exists and is a directory.
          */
         static bool directoryExists(const std::string &path);
+
+        /**
+         * appendErrorLog:
+         * Appends the provided 'message' string to "error.log" for internal debugging.
+         * This ensures that user-facing messages are not displayed.
+         */
+        static void appendErrorLog(const std::string &message);
     };
 
 } // namespace Ops

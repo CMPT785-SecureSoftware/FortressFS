@@ -3,12 +3,11 @@
 
 #include <string>
 #include <unordered_map>
+#include <nlohmann/json.hpp>
 
-/**
- * Namespace UOps encapsulates operations related to user management,
- * such as creating users, logging in, and updating mappings.
- */
+// Create an alias for convenience.
 namespace UOps {
+    using json = nlohmann::json;
 
     /**
      * User structure contains:
@@ -25,19 +24,21 @@ namespace UOps {
     };
 
     /**
-     * UserOps provides:
-     *  - createUser
-     *  - login
-     *  - mapUser / updateAdminMapping
-     *  - getUser / userExists
-     * and keeps an in-memory cache of User objects.
+     * UserOps provides functions for user management:
+     *  - createUser: Generates key pairs, creates directory structure, and stores mapping.
+     *  - login: Logs in a user using a keyfile.
+     *  - getUser / userExists: Manage the in-memory user cache.
+     *  - mapUser / updateAdminMapping: Update global mapping and admin mapping.
+     *
+     * Additionally, it provides public helper functions to load and save the encrypted
+     * user_file_mapping.json.
      */
     class UserOps {
     public:
         // createUser: generates keys, moves them, updates global mapping, etc.
         static bool createUser(const std::string &username);
 
-        // login: logs in using <username>_keyfile.pem content, decrypts mapping, verifies username.
+        // login: logs in using <username>_keyfile.pem content, decrypts user_file_mapping, verifies username.
         static std::string login(const std::string &keyfilePath);
 
         // getUser: returns the user from in-memory cache.
@@ -52,8 +53,23 @@ namespace UOps {
         // updateAdminMapping: updates admin_mapping.json with user private key, encrypted with admin's private key.
         static bool updateAdminMapping(const std::string &username, const std::string &userPrivateKey, const std::string &adminPrivateKey);
 
-        // The in-memory cache of users. Key is username.
+        // Public helper to load the user's encrypted file mapping.
+        static json loadUserFileMappingPublic(const std::string &username, const std::string &userPriv);
+
+        // Public helper to save the user's encrypted file mapping.
+        static bool saveUserFileMappingPublic(const std::string &username, const std::string &userPub, const json &mapping);
+
+        // In-memory cache of users.
         static std::unordered_map<std::string, User> users;
+
+    private:
+        /**
+         * createUserFileMapping:
+         * Creates a JSON describing the user's file mapping (e.g., root folder, personal folder, etc.),
+         * encrypts it with the user's public key, and writes it to the user's root folder.
+         * The file is named as sha256("user_file_mapping.json") under filesystem/<sha256(username)>.
+         */
+        static bool createUserFileMapping(const std::string &username, const std::string &userPub);
     };
 }
 
