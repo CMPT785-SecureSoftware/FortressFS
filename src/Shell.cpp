@@ -117,7 +117,7 @@ std::string InteractiveShell::resolvePath(const std::string &vpath) {
         std::string rootHash;
         rootHash = global[activeUser]["root"];
         std::string base = FILESYSTEM_DIR + "/" + rootHash + "/" + sharedHash;
-        std::cout << "Base: " << base << "\n";
+        //std::cout << "Base: " << base << "\n";
         std::istringstream iss(vpath);
         std::string token;
         std::string path = base;
@@ -132,7 +132,7 @@ std::string InteractiveShell::resolvePath(const std::string &vpath) {
                 path += "/" + SecOps::SecurityOps::sha256(token);
             }
         }
-        std::cout << "Path: " << path << "\n";
+        //std::cout << "Path: " << path << "\n";
         return path;
     } else {
         std::string base = FILESYSTEM_DIR + "/" + SecOps::SecurityOps::sha256(activeUser);
