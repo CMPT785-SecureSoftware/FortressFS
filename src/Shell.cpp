@@ -114,7 +114,9 @@ std::string InteractiveShell::resolvePath(const std::string &vpath) {
         else
             sharedHash = SecOps::SecurityOps::sha256("shared"); // fallback default
 
-        std::string base = FILESYSTEM_DIR + "/" + global[activeUser]["root"] + "/" + sharedHash;
+        std::string rootHash;
+        rootHash = global[activeUser]["root"];
+        std::string base = FILESYSTEM_DIR + "/" + rootHash + "/" + sharedHash;
         std::cout << "Base: " << base << "\n";
         std::istringstream iss(vpath);
         std::string token;
