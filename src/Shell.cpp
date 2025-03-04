@@ -343,7 +343,7 @@ void InteractiveShell::handle_ls() {
     }
 
     // At root for normal user or admin in own root view.
-    if (currentDir == "/" && (currentUser != "admin" || (currentUser == "admin" && isAdminFSMode && viewedUser.empty()))) {
+    if (currentDir == "/" || (currentUser == "admin" && isAdminFSMode && !viewedUser.empty())) {
         std::cout << "d -> .\n";
         std::cout << "d -> ..\n";
         std::cout << "personal\n";
