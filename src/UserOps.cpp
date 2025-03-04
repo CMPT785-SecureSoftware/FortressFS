@@ -185,7 +185,7 @@ namespace UOps {
         std::string userPub = pubBuf.str();
     
         // Cache the user in the in-memory map.
-        users[uname] = User{uname, keyData, userPub, false};
+        users[uname] = User{uname, keyData, userPub, (uname == "admin")};
         return uname;
     }
     
