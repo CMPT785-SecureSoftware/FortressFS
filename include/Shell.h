@@ -4,37 +4,38 @@
 #include <string>
 
 namespace Shell {
-    // InteractiveShell implements the command-line interface for the file system.
-    // Supported commands include: cd, pwd, ls, cat, share, mkdir, mkfile, exit, and adduser (admin-only).
+
+    /**
+     * InteractiveShell provides the command-line interface for the file system.
+     * It supports commands like cd, pwd, ls, cat, share, mkdir, mkfile, and adduser.
+     */
     class InteractiveShell {
     public:
-        // Constructor: takes the logged-in username.
+        // Constructor: takes the logged-in user's plaintext username.
         InteractiveShell(const std::string &username);
 
-        // Starts the shell loop.
+        // Start the interactive shell loop.
         void start();
 
     private:
-        std::string currentUser;  // Logged-in user.
-        std::string currentDir;   // Virtual current directory (starting at "/").
+        std::string currentUser;  // Plaintext username.
+        std::string currentDir;   // Virtual current directory (e.g., "/", "/shared", etc.).
 
-        // Resolves a virtual path (e.g., /personal/test.txt) to an absolute path within FILESYSTEM_DIR/<user>.
+        // Converts a virtual (plaintext) path to the on-disk path (using hashed names).
         std::string resolvePath(const std::string &vpath);
 
-        // Normalizes a path to handle "." and "..".
+        // Normalizes a path, handling "." and "..".
         std::string normalizePath(const std::string &path);
 
-        // Command handler methods.
-        void handle_cd(const std::string &arg);          // Change directory.
-        void handle_pwd();                                 // Print working directory.
-        void handle_ls();                                  // List directory contents.
-        void handle_cat(const std::string &filename);      // Display file contents (decrypted).
-        void handle_share(const std::string &args);        // Share a file with another user.
-        void handle_mkdir(const std::string &dirname);     // Create a directory.
-        void handle_mkfile(const std::string &args);       // Create/update a file.
-        void handle_adduser(const std::string &username);  // Admin-only: create a new user.
-
-        // Displays help information.
+        // Command handler functions.
+        void handle_cd(const std::string &arg);
+        void handle_pwd();
+        void handle_ls();
+        void handle_cat(const std::string &filename);
+        void handle_share(const std::string &args);
+        void handle_mkdir(const std::string &dirname);
+        void handle_mkfile(const std::string &args);
+        void handle_adduser(const std::string &username);
         void showHelp();
     };
 }

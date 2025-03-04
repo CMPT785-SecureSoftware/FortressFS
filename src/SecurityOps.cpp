@@ -3,17 +3,18 @@
 #include <openssl/pem.h>
 #include <openssl/bio.h>
 #include <openssl/rand.h>
-#include <openssl/err.h>    // For detailed error reporting
+#include <openssl/err.h>
+#include <openssl/sha.h>
 #include <stdexcept>
 #include <vector>
 #include <fstream>
 #include <sstream>
 #include <iostream>
 #include <cstring>
+#include <iomanip>
 
 namespace {
-
-    // Helper function to retrieve the latest OpenSSL error as a string.
+    // Retrieve the latest OpenSSL error as a string.
     std::string getOpenSSLError() {
         unsigned long errCode = ERR_get_error();
         char buf[256];
@@ -21,7 +22,7 @@ namespace {
         return std::string(buf);
     }
 
-    // Helper: Load a public key from a PEM string (SubjectPublicKeyInfo format).
+    // Helper function to load a public key from a PEM string.
     EVP_PKEY* loadPublicKey(const std::string &pubKeyPem) {
         BIO* bio = BIO_new_mem_buf(pubKeyPem.data(), static_cast<int>(pubKeyPem.size()));
         if (!bio)
@@ -33,7 +34,7 @@ namespace {
         return pkey;
     }
 
-    // Helper: Load a private key from a PEM string (PKCS#8 format).
+    // Helper function to load a private key from a PEM string.
     EVP_PKEY* loadPrivateKey(const std::string &privKeyPem) {
         BIO* bio = BIO_new_mem_buf(privKeyPem.data(), static_cast<int>(privKeyPem.size()));
         if (!bio)
@@ -73,7 +74,7 @@ bool SecurityOps::generateRSAKeyPair(const std::string &username)
     }
     EVP_PKEY_CTX_free(ctx);
 
-    // Write the private key to a file (PKCS#8 format)
+    // Write the private key to file in PKCS#8 format.
     {
         std::string privFilename = username + "_private.pem";
         BIO* bio = BIO_new_file(privFilename.c_str(), "w");
@@ -92,7 +93,7 @@ bool SecurityOps::generateRSAKeyPair(const std::string &username)
         BIO_free(bio);
     }
 
-    // Write the public key to a file (SubjectPublicKeyInfo format)
+    // Write the public key to file in SubjectPublicKeyInfo format.
     {
         std::string pubFilename = username + "_public.pem";
         BIO* bio = BIO_new_file(pubFilename.c_str(), "w");
@@ -225,7 +226,7 @@ std::string SecurityOps::aesEncrypt(const std::string &plaintext, const std::str
     EVP_CIPHER_CTX_free(ctx);
     ciphertext.resize(outLen1 + outLen2);
 
-    // Prepend the IV to the ciphertext.
+    // Prepend IV to the ciphertext.
     std::string result;
     result.assign(reinterpret_cast<char*>(iv), 16);
     result.append(reinterpret_cast<char*>(ciphertext.data()), ciphertext.size());
@@ -269,7 +270,7 @@ std::string SecurityOps::aesDecrypt(const std::string &ciphertext, const std::st
     return std::string(reinterpret_cast<char*>(plaintext.data()), plaintext.size());
 }
 
-// Compute SHA-256 hash of the input data and return its hex string.
+// Compute SHA-256 hash of input data and return a hex string.
 std::string SecurityOps::sha256(const std::string &data) {
     unsigned char hash[SHA256_DIGEST_LENGTH];
     SHA256(reinterpret_cast<const unsigned char*>(data.c_str()), data.size(), hash);

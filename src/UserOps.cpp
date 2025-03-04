@@ -9,132 +9,109 @@
 
 using json = nlohmann::json;
 
-namespace {
-    // Load the global mapping (combined from old user_mapping and naming mapping).
-    static json loadGlobalMapping() {
-        std::ifstream ifs("global_mapping.json");
-        if (!ifs) return json::object();
-        json j;
-        ifs >> j;
-        return j;
-    }
-    // Save the global mapping.
-    static bool saveGlobalMapping(const json &j) {
-        std::ofstream ofs("global_mapping.json");
-        ofs << j.dump(4);
-        return ofs.good();
-    }
-}
-
-
 namespace UOps {
 
+    // In-memory user cache.
     std::unordered_map<std::string, User> UserOps::users;
+    static const std::string PRIVATE_KEYS_DIR = "private_keys";
+    static const std::string PUBLIC_KEYS_DIR = "public_keys";
 
-    // Constants for key storage folders.
-    static const std::string PRIVATE_KEYS_DIR = "private_keys";     // For user private keys
-    static const std::string PUBLIC_KEYS_DIR = "public_keys";         // For public keys
-
-    // Fixed admin key identifier for login purposes.
-    // In our design, the admin's private key is stored in admin_keys.
-    // For login, if the key file content equals "ADMIN_PRIV", we log in as admin.
-    // (Alternatively, we can compare with the actual admin private key read from disk.)
-    static const std::string ADMIN_IDENTIFIER = "ADMIN_PRIV";
-
-    // createUser() is called by the admin (via adduser) to create a new user.
+    /**
+     * createUser:
+     *  - Validates the username.
+     *  - Generates RSA key pairs.
+     *  - Moves keyfiles to appropriate directories.
+     *  - Creates the per-user mapping file (named as hash("<username>_file_mapping.json"))
+     *    in the user's root directory.
+     *  - Updates the global mapping.
+     */
     bool UserOps::createUser(const std::string &username) {
-        // Validate the username: alphanumeric and hyphen only.
+        // Validate username characters.
         for (char c : username) {
             if (!std::isalnum(c) && c != '-') {
                 std::cerr << "Invalid username. Only alphanumeric characters and hyphen are allowed.\n";
                 return false;
             }
         }
-        
-        // Check if the user already exists.
-        if (userExists(username)) {
-            std::cout << "User " << username << " already exists\n";
-            return false;
-        }
-        // Generate RSA key pair for the user.
+        // Generate RSA key pair.
         if (!SecOps::SecurityOps::generateRSAKeyPair(username)) {
             std::cout << "Failed to generate key pair for " << username << "\n";
             return false;
         }
-        // Read the user's private key from the generated file.
+        // Read the generated private key.
         std::ifstream privFile(username + "_private.pem");
         std::stringstream privBuf;
         privBuf << privFile.rdbuf();
         std::string userPriv = privBuf.str();
 
-        // Read the user's public key.
+        // Read the generated public key.
         std::ifstream pubFile(username + "_public.pem");
         std::stringstream pubBuf;
         pubBuf << pubFile.rdbuf();
         std::string userPub = pubBuf.str();
 
-        // Move the private key to the private_keys folder.
+        // Save private key to private_keys folder.
         std::filesystem::create_directories(PRIVATE_KEYS_DIR);
         std::string keyfilePath = PRIVATE_KEYS_DIR + "/" + username + "_keyfile.pem";
         if (!Ops::FileOps::writeFile(keyfilePath, userPriv)) {
             std::cout << "Failed to write user keyfile\n";
             return false;
         }
-        // Move the public key to the public_keys folder.
+        // Move public key to public_keys folder.
         std::filesystem::create_directories(PUBLIC_KEYS_DIR);
         std::string pubDest = PUBLIC_KEYS_DIR + "/" + username + "_public.pem";
         std::filesystem::rename(username + "_public.pem", pubDest);
 
-        // Create the user record.
+        // Store the user in memory.
         users[username] = User{username, userPriv, userPub, false};
-
         std::cout << "Created user: " << username << "\n";
-        std::filesystem::remove(username+"_public.pem");
-        
-        // Create the per-user file mapping (for personal folder) in the user's root.
-        // This file will contain at least: {"username": "<username>", "files": {} }
+        std::filesystem::remove(username + "_public.pem");
+
+        // Create per-user mapping file.
+        std::string userRootDir = "filesystem/" + SecOps::SecurityOps::sha256(username);
+        std::filesystem::create_directories(userRootDir);
         json userMapping;
         userMapping["username"] = username;
         userMapping["files"] = json::object();
         std::string mappingStr = userMapping.dump(4);
-        // Encrypt the mapping string with the user's public key.
+        // Encrypt mapping using user's public key.
         std::string encryptedMapping = SecOps::SecurityOps::rsaEncrypt(mappingStr, userPub);
-        // Store this file in the user's root folder.
-        std::string userRootDir = "filesystem/" + SecOps::SecurityOps::sha256(username);
-        std::filesystem::create_directories(userRootDir);
-        // Compute the mapping file name as the hash of "<username>_file_mapping.json".
+        // Compute the mapping file name as hash("<username>_file_mapping.json")
         std::string mappingFileName = SecOps::SecurityOps::sha256(username + "_file_mapping.json");
         std::string mappingFilePath = userRootDir + "/" + mappingFileName;
         Ops::FileOps::writeFile(mappingFilePath, encryptedMapping);
 
-        // Use the mapUser function to update global_mapping.json.
+        // Update global mapping.
         if (!UserOps::mapUser(username, userPub)) {
-            std::cout << "Failed to update user mapping for " << username << "\n";
+            std::cout << "Failed to update global mapping for " << username << "\n";
             return false;
         }
         return true;
     }
 
-    // getUser returns the in-memory record.
+    // getUser: Returns the user from the in-memory cache.
     User UserOps::getUser(const std::string &username) {
         if (users.find(username) != users.end())
             return users[username];
         return User{"", "", "", false};
     }
 
-    // login() attempts to log in using the provided keyfile.
-    // It reads the keyfile (plaintext PEM), and then, if successful,
-    // then reading and decrypting the user_file_mapping.json from the user's root.
+    /**
+     * login:
+     *  - Reads the provided keyfile to obtain the private key.
+     *  - Determines the username from the keyfile name.
+     *  - Scans the user's hashed root directory for the single mapping file.
+     *  - Decrypts the file using the provided private key.
+     *  - Verifies that the decrypted JSON contains the correct username.
+     *  - Loads the corresponding public key from disk and stores the user in memory.
+     */
     std::string UserOps::login(const std::string &keyfilePath) {
-        // Extract only the filename portion from the provided keyfile path.
         std::filesystem::path p(keyfilePath);
         std::string baseKeyfile = p.filename().string();
 
         std::string keyData;
-        // Try reading the keyfile from the provided path.
         std::ifstream ifs(keyfilePath, std::ios::binary);
         if (!ifs) {
-            // If not found, try in the private_keys folder.
             std::string alt = PRIVATE_KEYS_DIR + "/" + baseKeyfile;
             std::ifstream ifs2(alt, std::ios::binary);
             if (!ifs2)
@@ -147,19 +124,26 @@ namespace UOps {
         }
         if (keyData.empty())
             return "";
-        
         size_t pos = baseKeyfile.find("_keyfile.pem");
         if (pos == std::string::npos)
             return "";
         std::string uname = baseKeyfile.substr(0, pos);
 
-        // Determine the path for the user's mapping file.
+        // Locate the per-user mapping file by scanning the user's root directory.
         std::string userRootDir = "filesystem/" + SecOps::SecurityOps::sha256(uname);
-        // Compute the mapping file name as the hash of "<username>_file_mapping.json".
-        std::string mappingFileName = SecOps::SecurityOps::sha256(username + "_file_mapping.json");
-        std::string mappingFilePath = userRootDir + "/" + mappingFileName;
-        if (!std::filesystem::exists(mappingFilePath)) {
-            std::cerr << "User mapping file not found for " << uname << "\n";
+        if (!std::filesystem::exists(userRootDir)) {
+            std::cerr << "User root directory not found for " << uname << "\n";
+            return "";
+        }
+        std::string mappingFilePath = "";
+        for (const auto &entry : std::filesystem::directory_iterator(userRootDir)) {
+            if (!entry.is_directory()) { // Should be the only file in root.
+                mappingFilePath = entry.path().string();
+                break;
+            }
+        }
+        if (mappingFilePath.empty()) {
+            std::cerr << "Mapping file not found for user " << uname << "\n";
             return "";
         }
         std::string encryptedMapping = Ops::FileOps::readFile(mappingFilePath);
@@ -170,7 +154,6 @@ namespace UOps {
             std::cerr << "User mapping decryption failed: " << e.what() << "\n";
             return "";
         }
-        // Parse the decrypted JSON.
         json mapping;
         try {
             mapping = json::parse(decryptedMapping);
@@ -178,32 +161,39 @@ namespace UOps {
             std::cerr << "Failed to parse user mapping JSON\n";
             return "";
         }
-        // Check that the mapping file confirms the username.
         if (!mapping.contains("username") || mapping["username"] != uname) {
             std::cerr << "User mapping does not match for " << uname << "\n";
             return "";
         }
-        // If all is well, register the user.
-        if (users.find(uname) == users.end()) {
-            std::ifstream pub((std::string("public_keys/") + "/" + uname + "_public.pem").c_str());
-            std::stringstream pubBuf;
-            pubBuf << pub.rdbuf();
-            std::string userPub = pubBuf.str();
-            users[uname] = User{uname, keyData, userPub, false};
-        }
+        // Load the public key from disk.
+        std::string pubFilePath = PUBLIC_KEYS_DIR + "/" + uname + "_public.pem";
+        std::ifstream pubFile(pubFilePath);
+        std::stringstream pubBuf;
+        pubBuf << pubFile.rdbuf();
+        std::string userPub = pubBuf.str();
+        users[uname] = User{uname, keyData, userPub, false};
         return uname;
     }
 
-    // mapUser updates the global mapping (global_mapping.json) for a given user.
-    // It stores the hashed root and hashed shared folder names.
+    /**
+     * mapUser:
+     * Updates the global mapping file (global_mapping.json) with the base directory hashes
+     * for the user (root and shared) and initializes an empty mapping for shared_files.
+     */
     bool UserOps::mapUser(const std::string &username, const std::string &publicKey) {
-        json mapping = loadGlobalMapping();
-        // For each user, store an object with "root", "shared" and an empty "shared_files" mapping.
+        json mapping;
+        std::ifstream ifs("global_mapping.json");
+        if (ifs) {
+            ifs >> mapping;
+            ifs.close();
+        }
         mapping[username] = {
             { "root", SecOps::SecurityOps::sha256(username) },
             { "shared", SecOps::SecurityOps::sha256("shared") },
             { "shared_files", json::object() }
         };
-        return saveGlobalMapping(mapping);
+        std::ofstream ofs("global_mapping.json");
+        ofs << mapping.dump(4);
+        return ofs.good();
     }
 }
