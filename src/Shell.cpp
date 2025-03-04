@@ -30,13 +30,13 @@ namespace {
         return ofs.good();
     }
 
-    // Check if path is "/personal" or begins with "/personal/"
+    // Check if a virtual path is in the personal directory.
     bool isInPersonalDirectory(const std::string &vpath) {
         if (vpath == "/personal") return true;
         return (vpath.rfind("/personal/", 0) == 0);
     }
 
-    // Check if path is "/shared" or begins with "/shared/"
+    // Check if a virtual path is in the shared directory.
     bool isInSharedDirectory(const std::string &vpath) {
         if (vpath == "/shared") return true;
         return (vpath.rfind("/shared/", 0) == 0);
@@ -57,7 +57,7 @@ namespace {
     };
 
     Command getCommand(const std::string &cmd) {
-        static const std::unordered_map<std::string, Command> cmdMap = {
+        static const std::unordered_map<std::string, int> cmdMap = {
             {"cd", CMD_CD},
             {"pwd", CMD_PWD},
             {"ls", CMD_LS},
@@ -81,13 +81,12 @@ static const std::string FILESYSTEM_DIR = "filesystem";
 
 /**
  * Constructor:
- * - If the logged-in user is "admin", set up admin-specific variables.
- * - Otherwise, normal user settings.
+ * Sets up the interactive shell for the logged-in user.
  */
 InteractiveShell::InteractiveShell(const std::string &username)
     : currentUser(username), currentDir("/") {
     if (currentUser == "admin") {
-        isAdminFSMode = false; // start in admin's own root view
+        isAdminFSMode = false; // Admin starts in their own root view.
         viewedUser.clear();
     } else {
         isAdminFSMode = false;
@@ -102,7 +101,6 @@ InteractiveShell::InteractiveShell(const std::string &username)
  */
 std::string InteractiveShell::resolvePath(const std::string &vpath) {
     std::string activeUser = (currentUser == "admin" && !viewedUser.empty()) ? viewedUser : currentUser;
-
     if (vpath.rfind("/shared", 0) == 0) {
         json global = loadGlobalMapping();
         std::string sharedHash = global[activeUser]["shared"];
@@ -123,9 +121,7 @@ std::string InteractiveShell::resolvePath(const std::string &vpath) {
         return path;
     } else {
         std::string base = FILESYSTEM_DIR + "/" + SecOps::SecurityOps::sha256(activeUser);
-        if (vpath.empty() || vpath == "/") {
-            return base;
-        }
+        if (vpath.empty() || vpath == "/") return base;
         std::istringstream iss(vpath);
         std::string token;
         std::string path = base;
@@ -144,7 +140,7 @@ std::string InteractiveShell::resolvePath(const std::string &vpath) {
 
 /**
  * normalizePath:
- * Splits the virtual path on '/', resolving "." and ".." entries.
+ * Splits a virtual path by '/', handling "." and ".." entries.
  */
 std::string InteractiveShell::normalizePath(const std::string &path) {
     std::vector<std::string> parts;
@@ -168,18 +164,19 @@ std::string InteractiveShell::normalizePath(const std::string &path) {
 
 /**
  * handle_cd:
- * - For normal users: navigates within their personal/shared directories.
+ * Implements the cd command with the following logic:
+ * - Normal users navigate within their personal/shared directories.
  * - For admin:
- *   * If at admin's root ("/"), "cd shared" or "cd personal" is allowed (ensuring the hashed folder exists).
+ *   * If at admin's root ("/") and typing "cd shared" or "cd personal", the corresponding folder is ensured to exist and then currentDir is set.
  *   * "cd .." at admin's root switches to filesystem view.
- *   * In filesystem view, "cd <username>" allows admin to view that user's directory (read-only).
- *   * When admin is viewing a user, "cd .." at "/" returns admin to filesystem view.
+ *   * In filesystem view, "cd <username>" allows admin to view that user's directory.
+ *   * When admin is viewing a user, "cd .." from "/" returns to filesystem view.
  */
 void InteractiveShell::handle_cd(const std::string &arg) {
     if (arg.empty()) return;
     std::string target = arg;
 
-    // Admin at own root and exactly at "/" 
+    // Admin at own root "/" and not in filesystem view:
     if (currentUser == "admin" && !isAdminFSMode && viewedUser.empty() && currentDir == "/") {
         if (target == "..") {
             isAdminFSMode = true;
@@ -198,7 +195,7 @@ void InteractiveShell::handle_cd(const std::string &arg) {
         }
     }
 
-    // Admin in filesystem view: "cd <username>"
+    // Admin in filesystem view (isAdminFSMode true)
     if (currentUser == "admin" && isAdminFSMode) {
         if (target == "..") {
             std::cout << "Already at filesystem view, can't go higher.\n";
@@ -245,7 +242,7 @@ void InteractiveShell::handle_cd(const std::string &arg) {
         }
     }
 
-    // Normal users:
+    // Normal users: prevent moving above root
     if (currentUser != "admin" && currentDir == "/" && target == "..") {
         std::cout << "Access denied: You cannot move above your root.\n";
         return;
@@ -255,7 +252,7 @@ void InteractiveShell::handle_cd(const std::string &arg) {
         return;
     }
 
-    // Normal path resolution.
+    // For all others, perform normal path resolution.
     std::string newPath;
     if (target[0] == '/') newPath = normalizePath(target);
     else newPath = normalizePath(currentDir + "/" + target);
@@ -270,9 +267,9 @@ void InteractiveShell::handle_cd(const std::string &arg) {
 
 /**
  * handle_pwd:
- * - If admin is in filesystem view, prints "filesystem".
+ * - If admin in filesystem view, prints "filesystem".
  * - If admin is viewing a user, prints "/<user>".
- * - Otherwise prints currentDir.
+ * - Otherwise, prints currentDir.
  */
 void InteractiveShell::handle_pwd() {
     if (currentUser == "admin") {
@@ -289,18 +286,20 @@ void InteractiveShell::handle_pwd() {
 
 /**
  * handle_ls:
- * - Available everywhere.
- * - In a user's root (or when admin is viewing a user), if at "/" it should only show:
+ * Implements the ls command:
+ * - If admin is in filesystem view, lists users from admin_mapping.json.
+ * - If at a user's root ("/"), displays:
  *      d -> .
  *      d -> ..
  *      personal
  *      shared
- * - When in the shared folder, it uses global_mapping.json to list files.
- * - When in the personal folder, it loads the user_file_mapping to list original names.
- * - When in filesystem view (admin), it lists users from admin_mapping.json.
+ * - In the shared folder, consults global_mapping.json to list files.
+ * - In the personal folder, loads the user_file_mapping (using the user's private key)
+ *   and lists original names from the "entries" subobject.
+ * - Otherwise, falls back to listing hashed names.
  */
 void InteractiveShell::handle_ls() {
-    // Admin in filesystem view: list users from admin_mapping.
+    // Admin in filesystem view.
     if (currentUser == "admin" && isAdminFSMode) {
         std::string adminMappingFile = SecOps::SecurityOps::sha256("admin_mapping.json");
         std::string adminMappingPath = FILESYSTEM_DIR + "/" + adminMappingFile;
@@ -323,7 +322,7 @@ void InteractiveShell::handle_ls() {
         return;
     }
 
-    // If at root ("/") for normal user or admin in own root, show fixed entries.
+    // At root for normal user or admin in own root view.
     if (currentDir == "/" && (currentUser != "admin" || (currentUser=="admin" && !isAdminFSMode && viewedUser.empty()))) {
         std::cout << "d -> .\n";
         std::cout << "d -> ..\n";
@@ -332,7 +331,6 @@ void InteractiveShell::handle_ls() {
         return;
     }
 
-    // Otherwise, perform listing based on current directory type.
     std::string realDir = resolvePath(currentDir);
     if (!Ops::FileOps::directoryExists(realDir)) {
         std::cout << "Directory does not exist.\n";
@@ -343,7 +341,7 @@ void InteractiveShell::handle_ls() {
 
     std::string activeUser = (currentUser=="admin" && !viewedUser.empty()) ? viewedUser : currentUser;
 
-    // If in shared directory, list from global_mapping shared_files.
+    // If in shared directory, list shared files from global_mapping.
     if (isInSharedDirectory(currentDir)) {
         json global = loadGlobalMapping();
         if (global.contains(activeUser) && global[activeUser].contains("shared_files")) {
@@ -358,14 +356,13 @@ void InteractiveShell::handle_ls() {
     if (isInPersonalDirectory(currentDir)) {
         json filemap = UOps::UserOps::loadUserFileMappingPublic(activeUser, UOps::UserOps::getUser(activeUser).privateKey);
         if (filemap.empty() || !filemap.contains("entries")) {
-            // Fallback: list hashed names.
+            // Fallback to listing hashed names.
             for (auto &entry : std::filesystem::directory_iterator(realDir)) {
                 std::cout << entry.path().filename().string() << "\n";
             }
             return;
         }
         for (auto &item : filemap["entries"].items()) {
-            // Each entry should have "name" and "type"
             if (item.value().contains("name") && item.value().contains("type")) {
                 std::string name = item.value()["name"];
                 std::string type = item.value()["type"];
@@ -384,19 +381,17 @@ void InteractiveShell::handle_ls() {
 }
 
 /**
- * handle_cat, handle_share, handle_mkdir, handle_mkfile, handle_adduser:
- * These functions remain largely unchanged.
- * (They can be updated similarly to handle ls to update user_file_mapping "entries" as needed.)
+ * handle_cat:
+ * Uses existing logic to display file contents.
+ * (For brevity, we leave the cat command as previously implemented.)
  */
 void InteractiveShell::handle_cat(const std::string &filename) {
-    // ... existing cat logic remains ...
     if (filename.empty()) return;
     if (!isInPersonalDirectory(currentDir) && !isInSharedDirectory(currentDir)) {
         std::cout << "Access denied: cat is allowed only in personal or shared directories.\n";
         return;
     }
     std::string activeUser = (currentUser=="admin" && !viewedUser.empty()) ? viewedUser : currentUser;
-    // For brevity, using same logic as before:
     std::string hashedName;
     bool found = false;
     if (isInSharedDirectory(currentDir)) {
@@ -421,7 +416,7 @@ void InteractiveShell::handle_cat(const std::string &filename) {
             return;
         }
         std::string userKey = UOps::UserOps::getUser(activeUser).privateKey;
-        std::string aesKey = userKey.substr(0,32);
+        std::string aesKey = userKey.substr(0, 32);
         std::string enc = Ops::FileOps::readFile(realFile);
         try {
             std::string dec = SecOps::SecurityOps::aesDecrypt(enc, aesKey);
@@ -438,7 +433,7 @@ void InteractiveShell::handle_cat(const std::string &filename) {
             return;
         }
         std::string userKey = UOps::UserOps::getUser(activeUser).privateKey;
-        std::string aesKey = userKey.substr(0,32);
+        std::string aesKey = userKey.substr(0, 32);
         std::string enc = Ops::FileOps::readFile(realFile);
         try {
             std::string dec = SecOps::SecurityOps::aesDecrypt(enc, aesKey);
@@ -449,8 +444,11 @@ void InteractiveShell::handle_cat(const std::string &filename) {
     }
 }
 
+/**
+ * handle_share, handle_mkdir, handle_mkfile, and handle_adduser remain largely unchanged.
+ * (You can update these to also update the user_file_mapping "entries" as needed.)
+ */
 void InteractiveShell::handle_share(const std::string &args) {
-    // ... unchanged share logic ...
     std::istringstream iss(args);
     std::string filename, targetUser;
     iss >> filename >> targetUser;
@@ -489,7 +487,6 @@ void InteractiveShell::handle_share(const std::string &args) {
 }
 
 void InteractiveShell::handle_mkdir(const std::string &dirname) {
-    // ... unchanged mkdir logic ...
     if (dirname.empty()) {
         std::cout << "Usage: mkdir <directory_name>\n";
         return;
@@ -518,11 +515,10 @@ void InteractiveShell::handle_mkdir(const std::string &dirname) {
         return;
     }
     std::cout << "Created directory " << dirname << "\n";
-    // Optionally, update user_file_mapping "entries" with this new directory.
+    // Optionally, update user_file_mapping "entries" here.
 }
 
 void InteractiveShell::handle_mkfile(const std::string &args) {
-    // ... unchanged mkfile logic ...
     std::istringstream iss(args);
     std::string filename;
     iss >> filename;
@@ -561,7 +557,7 @@ void InteractiveShell::handle_mkfile(const std::string &args) {
     std::string realFile = realDir + "/" + hashed;
     Ops::FileOps::writeFile(realFile, enc);
     std::cout << "Created file " << filename << "\n";
-    // Optionally, update user_file_mapping "entries" with this new file.
+    // Optionally, update user_file_mapping "entries" here.
 }
 
 void InteractiveShell::handle_adduser(const std::string &username) {
@@ -581,7 +577,6 @@ void InteractiveShell::handle_adduser(const std::string &username) {
         std::cout << "Failed to create user " << username << "\n";
         return;
     }
-    // Update admin mapping with user's private key.
     std::string adminPriv = UOps::UserOps::getUser("admin").privateKey;
     std::string userPriv = UOps::UserOps::getUser(username).privateKey;
     if (!UOps::UserOps::updateAdminMapping(username, userPriv, adminPriv)) {
@@ -663,7 +658,7 @@ void InteractiveShell::showHelp() {
 
 /**
  * start:
- * Main interactive loop that reads commands and dispatches them.
+ * The main interactive loop: reads commands, dispatches them accordingly.
  */
 void InteractiveShell::start() {
     std::unordered_map<std::string,int> cmdMap = {
@@ -677,7 +672,6 @@ void InteractiveShell::start() {
         std::string line;
         if (!std::getline(std::cin, line)) break;
         if (line.empty()) continue;
-
         std::istringstream iss(line);
         std::string cmd;
         iss >> cmd;
