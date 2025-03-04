@@ -188,6 +188,7 @@ bool UserOps::createUser(const std::string &username) {
     bool adminFlag = (username == "admin");
     users[username] = User{username, userPriv, userPub, adminFlag};
     if (username == "admin"){
+        std::cout << "Updating user mapping for admin...\n";
         if (!UOps::UserOps::updateAdminMapping(username, userPriv, userPub)) {
             std::cout << "Failed to update admin mapping.\n";
         }
