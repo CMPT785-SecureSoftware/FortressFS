@@ -48,9 +48,9 @@ static void initFortress() {
             exit(1);
         }
         // Read admin_private.pem
-        std::ifstream ifs("admin_private.pem");
+        std::ifstream ifs("admin_keyfile.pem");
         if (!ifs) {
-            std::cerr << "Failed to open newly generated admin_private.pem\n";
+            std::cerr << "Failed to open newly generated admin_keyfile.pem\n";
             exit(1);
         }
         std::stringstream ss;
@@ -67,7 +67,7 @@ static void initFortress() {
         ofs << adminPriv;
         ofs.close();
         // Remove the original unencrypted private file.
-        std::filesystem::remove("admin_private.pem");
+        std::filesystem::remove("admin_keyfile.pem");
 
         // Move admin public key to public_keys/admin_public.pem
         std::string pubSrc = "admin_public.pem";
