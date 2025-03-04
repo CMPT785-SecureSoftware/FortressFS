@@ -383,6 +383,7 @@ void InteractiveShell::handle_ls() {
     }
     // In personal directory, load user_file_mapping to list original names.
     if (isInPersonalDirectory(currentDir)) {
+        std::cout<< "In personal directory\n";
         json filemap = UOps::UserOps::loadUserFileMappingPublic(activeUser, UOps::UserOps::getUser(activeUser).privateKey);
         if (filemap.empty() || !filemap.contains("entries")) {
             std::cout << "No entries.\n";
