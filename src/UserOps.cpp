@@ -58,6 +58,7 @@ namespace UOps {
         users[username] = User{username, userPriv, userPub, false};
         std::cout << "Created user: " << username << "\n";
         std::filesystem::remove(username + "_public.pem");
+        std::filesystem::remove(username + "_private.pem");
 
         // Create per-user mapping file.
         std::string userRootDir = "filesystem/" + SecOps::SecurityOps::sha256(username);
