@@ -385,6 +385,7 @@ void InteractiveShell::handle_ls() {
     if (isInPersonalDirectory(currentDir)) {
         json filemap = UOps::UserOps::loadUserFileMappingPublic(activeUser, UOps::UserOps::getUser(activeUser).privateKey);
         if (filemap.empty() || !filemap.contains("entries")) {
+            std::cout << "No entries.\n";
             for (auto &entry : std::filesystem::directory_iterator(realDir)) {
                 std::cout << entry.path().filename().string() << "\n";
             }
