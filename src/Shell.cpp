@@ -121,6 +121,7 @@ std::string InteractiveShell::resolvePath(const std::string &vpath) {
         std::istringstream iss(vpath);
         std::string token;
         std::string path = base;
+        std::getline(iss, token, '/'); // Skip "/shared"
         std::getline(iss, token, '/'); // Skip "shared"
         while (std::getline(iss, token, '/')) {
             if (token.empty() || token == ".") continue;
