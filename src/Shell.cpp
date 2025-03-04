@@ -343,7 +343,7 @@ void InteractiveShell::handle_ls() {
     }
 
     // At root for normal user or admin in own root view.
-    if (currentDir == "/" && (currentUser != "admin" || (currentUser == "admin" && !isAdminFSMode && viewedUser.empty()))) {
+    if (currentDir == "/" && (currentUser != "admin" || (currentUser == "admin" && isAdminFSMode && viewedUser.empty()))) {
         std::cout << "d -> .\n";
         std::cout << "d -> ..\n";
         std::cout << "personal\n";
@@ -516,7 +516,7 @@ void InteractiveShell::handle_mkdir(const std::string &dirname) {
     }
     std::string realDir = resolvePath(currentDir);
     if (!Ops::FileOps::directoryExists(realDir)) {
-        std::cout << "Directory does not exist.\n";
+        std::cout << "Directory does npweot exist.\n";
         return;
     }
     std::string hashed = SecOps::SecurityOps::sha256(dirname);
