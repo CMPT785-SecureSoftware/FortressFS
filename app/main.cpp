@@ -40,7 +40,7 @@ static void initFortress() {
     // Check if admin's keyfile is present
     std::string adminPath = ADMIN_KEYS_DIR + "/" + ADMIN_KEYFILE;
     if (!std::filesystem::exists(adminPath)) {
-        std::cout << "No admin keyfile found. Creating admin user via createUser(\"admin\")...\n";
+        std::cout << "No admin keyfile found. Creating admin user.\n";
 
         // We call createUser("admin") in unified logic
         if (!UOps::UserOps::createUser("admin")) {
