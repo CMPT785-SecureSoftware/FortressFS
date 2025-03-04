@@ -81,8 +81,8 @@ static const std::string FILESYSTEM_DIR = "filesystem";
 
 /**
  * InteractiveShell constructor:
- * - If user is "admin", isAdminFSMode = false, viewedUser = "" (admin’s own view).
- * - Otherwise normal user (isAdminFSMode=false, no viewedUser).
+ * - If user is "admin", isAdminFSMode=false, viewedUser=""
+ * - Otherwise normal user
  */
 InteractiveShell::InteractiveShell(const std::string &username)
     : currentUser(username), currentDir("/") {
@@ -97,13 +97,14 @@ InteractiveShell::InteractiveShell(const std::string &username)
 
 /**
  * resolvePath:
- * Converts a virtual path ("/shared/docs") to the hashed on-disk path
- * using either currentUser or viewedUser if admin is in user view.
+ * If path is "/shared" or starts with "/shared", we consult global_mapping to find
+ * <hash_of("shared")>. Otherwise, it's personal or subdirectories. The resulting
+ * real path is under filesystem/<hash_of_user> or <hash_of_user>/<hash_of("shared")>.
  */
 std::string InteractiveShell::resolvePath(const std::string &vpath) {
     std::string activeUser = (currentUser == "admin" && !viewedUser.empty()) ? viewedUser : currentUser;
 
-    // If path starts with "/shared", we consult global_mapping for the active user’s shared folder
+    // if vpath starts with "/shared"
     if (vpath.rfind("/shared", 0) == 0) {
         json global = loadGlobalMapping();
         std::string sharedHash = global[activeUser]["shared"];
@@ -111,8 +112,7 @@ std::string InteractiveShell::resolvePath(const std::string &vpath) {
         std::istringstream iss(vpath);
         std::string token;
         std::string path = base;
-        // skip initial "shared"
-        std::getline(iss, token, '/');
+        std::getline(iss, token, '/'); // skip "shared"
         while (std::getline(iss, token, '/')) {
             if (token.empty() || token == ".") continue;
             if (token == "..") {
@@ -124,7 +124,7 @@ std::string InteractiveShell::resolvePath(const std::string &vpath) {
         }
         return path;
     } else {
-        // otherwise handle personal or subdirectories
+        // personal or subdir
         std::string base = FILESYSTEM_DIR + "/" + SecOps::SecurityOps::sha256(activeUser);
         if (vpath.empty() || vpath == "/") {
             return base;
@@ -147,7 +147,7 @@ std::string InteractiveShell::resolvePath(const std::string &vpath) {
 
 /**
  * normalizePath:
- * Splits on '/', handles '.' and '..'
+ * Splits on '/', interprets '.' and '..'
  */
 std::string InteractiveShell::normalizePath(const std::string &path) {
     std::vector<std::string> parts;
@@ -171,36 +171,56 @@ std::string InteractiveShell::normalizePath(const std::string &path) {
 
 /**
  * handle_cd:
- * - The "cd" command is available in all directories.
- * - If admin is in filesystem view, "cd <username>" is allowed only for users in admin_mapping (or 'admin' to go back).
- * - "cd .." from admin's root => filesystem mode *only* if currentDir == "/" (i.e. truly at the root).
+ * - If admin is at root "/" (not filesystem mode, not viewing user) and user does "cd shared" or "cd personal",
+ *   we ensure hashed directory physically exists, then set currentDir to "/shared" or "/personal".
+ * - If admin is at root "/" and does "cd ..", we go to filesystem mode.
+ * - If admin in filesystem => "cd <username>" => see if user in admin_mapping, else error.
+ * - If admin is viewing user => "cd .." at root => back to filesystem.
+ * - Otherwise normal path resolution.
  */
 void InteractiveShell::handle_cd(const std::string &arg) {
     if (arg.empty()) return;
     std::string target = arg;
 
-    // If admin is in own root ("/"), and currentDir == "/", "cd .." => filesystem view
-    if (currentUser == "admin" && !isAdminFSMode && viewedUser.empty() && currentDir == "/" && target == "..") {
-        isAdminFSMode = true;
-        currentDir = "/";
-        return;
+    // 1) If admin at own root "/" and not in filesystem or user view
+    if (currentUser == "admin" && !isAdminFSMode && viewedUser.empty() && currentDir == "/") {
+        // a) "cd .." => filesystem mode
+        if (target == "..") {
+            isAdminFSMode = true;
+            currentDir = "/";
+            return;
+        }
+        // b) "cd shared" or "cd personal"
+        if (target == "shared" || target == "personal") {
+            // We'll forcibly ensure the hashed directory exists, then do currentDir = "/shared"
+            std::string userHash = SecOps::SecurityOps::sha256("admin");
+            std::string dirHash = SecOps::SecurityOps::sha256(target); // "shared" or "personal"
+            std::string realPath = FILESYSTEM_DIR + "/" + userHash + "/" + dirHash;
+            if (!Ops::FileOps::directoryExists(realPath)) {
+                // Create it if missing
+                Ops::FileOps::makeDirectory(realPath);
+            }
+            // Now set currentDir to "/shared" or "/personal"
+            std::string newDir = "/" + target; 
+            currentDir = newDir;
+            return;
+        }
     }
 
-    // If admin is in filesystem => "cd <username>"
+    // 2) If admin is in filesystem mode => "cd <username>"
     if (currentUser == "admin" && isAdminFSMode) {
-        // If user typed "cd ..", do nothing (we're already at highest level)
         if (target == "..") {
             std::cout << "Already at filesystem view, can't go higher.\n";
             return;
         }
-        // "cd admin" => revert to admin's own root
+        // "cd admin" => revert to admin root
         if (target == "admin") {
             viewedUser.clear();
             isAdminFSMode = false;
             currentDir = "/";
             return;
         }
-        // Otherwise we check admin_mapping for target
+        // else check admin_mapping for <username>
         std::string adminMappingFile = SecOps::SecurityOps::sha256("admin_mapping.json");
         std::string adminMappingPath = FILESYSTEM_DIR + "/" + adminMappingFile;
         json admMap;
@@ -226,7 +246,7 @@ void InteractiveShell::handle_cd(const std::string &arg) {
         }
     }
 
-    // If admin is viewing some user => "cd .." => back to filesystem if currentDir == "/"
+    // 3) If admin is viewing a user => "cd .." from user root => back to filesystem
     if (currentUser == "admin" && !viewedUser.empty()) {
         if (target == ".." && currentDir == "/") {
             viewedUser.clear();
@@ -234,25 +254,26 @@ void InteractiveShell::handle_cd(const std::string &arg) {
             currentDir = "/";
             return;
         }
-        // If admin is deeper than "/", e.g. "/personal", a "cd .." just does normal path resolution below.
     }
 
-    // Normal path resolution for normal user or admin in own subdirectories
-    // For normal user => if they're at "/" and do "cd ..", block
+    // 4) Normal path resolution for everything else
+    // If a normal user is at "/" and does "cd ..", block
     if (currentUser != "admin" && currentDir == "/" && target == "..") {
         std::cout << "Access denied: You cannot move above your root.\n";
         return;
     }
-    // Also block user from "cd /" if they're not admin
+    // block normal user from "cd /"
     if (target == "/" && currentUser != "admin") {
         std::cout << "Access denied: You cannot cd to system root (/).\n";
         return;
     }
 
+    // generate new virtual path
     std::string newPath;
     if (target[0] == '/') newPath = normalizePath(target);
     else newPath = normalizePath(currentDir + "/" + target);
 
+    // see if physically exists
     std::string realPath = resolvePath(newPath);
     if (Ops::FileOps::directoryExists(realPath)) {
         currentDir = newPath;
@@ -262,10 +283,7 @@ void InteractiveShell::handle_cd(const std::string &arg) {
 }
 
 /**
- * handle_pwd:
- * - admin FS => "filesystem"
- * - admin in user => "/<user>"
- * - otherwise => currentDir
+ * handle_pwd, handle_ls, handle_cat, etc. are unchanged
  */
 void InteractiveShell::handle_pwd() {
     if (currentUser == "admin") {
@@ -280,14 +298,8 @@ void InteractiveShell::handle_pwd() {
     std::cout << currentDir << "\n";
 }
 
-/**
- * handle_ls:
- * - admin in FS => list admin_mapping
- * - if at "/" => show . .. personal shared
- * - if in shared => read from global
- * - if in personal => fallback listing
- */
 void InteractiveShell::handle_ls() {
+    // (same as before)
     if (currentUser == "admin" && isAdminFSMode) {
         std::string adminMappingFile = SecOps::SecurityOps::sha256("admin_mapping.json");
         std::string adminMappingPath = FILESYSTEM_DIR + "/" + adminMappingFile;
@@ -324,6 +336,7 @@ void InteractiveShell::handle_ls() {
     }
     std::cout << "d -> .\n";
     std::cout << "d -> ..\n";
+
     std::string activeUser = (currentUser=="admin" && !viewedUser.empty()) ? viewedUser : currentUser;
     if (isInSharedDirectory(currentDir)) {
         json global = loadGlobalMapping();
@@ -340,12 +353,8 @@ void InteractiveShell::handle_ls() {
     }
 }
 
-/**
- * handle_cat:
- * We must look up the hashed file name from the mapping (global or personal)
- * so we can read the correct hashed file from disk.
- */
 void InteractiveShell::handle_cat(const std::string &filename) {
+    // (same as before)
     if (filename.empty()) return;
     if (!isInPersonalDirectory(currentDir) && !isInSharedDirectory(currentDir)) {
         std::cout << "Access denied: cat is allowed only in personal or shared directories.\n";
@@ -404,13 +413,8 @@ void InteractiveShell::handle_cat(const std::string &filename) {
     }
 }
 
-/**
- * handle_share:
- * - only in personal
- * - read hashed file from personal, copy to target's /shared hashed path
- * - update global mapping
- */
 void InteractiveShell::handle_share(const std::string &args) {
+    // (same as before)
     std::istringstream iss(args);
     std::string filename, targetUser;
     iss >> filename >> targetUser;
@@ -448,12 +452,8 @@ void InteractiveShell::handle_share(const std::string &args) {
     std::cout << "Shared file with " << targetUser << " at /shared/" << filename << "\n";
 }
 
-/**
- * handle_mkdir:
- * - only in personal
- * - admin read-only if in other user's directory or filesystem
- */
 void InteractiveShell::handle_mkdir(const std::string &dirname) {
+    // (same as before)
     if (dirname.empty()) {
         std::cout << "Usage: mkdir <directory_name>\n";
         return;
@@ -484,12 +484,8 @@ void InteractiveShell::handle_mkdir(const std::string &dirname) {
     std::cout << "Created directory " << dirname << "\n";
 }
 
-/**
- * handle_mkfile:
- * - only in personal
- * - admin read-only if in user view or FS
- */
 void InteractiveShell::handle_mkfile(const std::string &args) {
+    // (same as before)
     std::istringstream iss(args);
     std::string filename;
     iss >> filename;
@@ -582,7 +578,7 @@ void InteractiveShell::showHelp() {
                       << "  ls                     - List decrypted\n"
                       << "  cat <file>             - Show file content\n"
                       << "  pwd                    - Show '/" << viewedUser << "'\n"
-                      << "  cd ..                  - Return to filesystem view\n"
+                      << "  cd ..                  - Return to filesystem view if at '/'\n"
                       << "  exit                   - Quit\n"
                       << "  help                   - Show help\n";
         } else {
