@@ -107,35 +107,40 @@ namespace UOps {
      * - Loads the user's public key from disk and caches the user.
      */
     std::string UserOps::login(const std::string &keyfilePath) {
-        std::filesystem::path p(keyfilePath);
-        std::string baseKeyfile = p.filename().string();
-
-        std::string keyData;
+        // Attempt to read the keyfile content from the given path.
         std::ifstream ifs(keyfilePath, std::ios::binary);
         if (!ifs) {
-            std::string alt = PRIVATE_KEYS_DIR + "/" + baseKeyfile;
-            std::ifstream ifs2(alt, std::ios::binary);
-            if (!ifs2)
-                return "";
-            keyData = std::string((std::istreambuf_iterator<char>(ifs2)),
-                                  std::istreambuf_iterator<char>());
-        } else {
-            keyData = std::string((std::istreambuf_iterator<char>(ifs)),
-                                  std::istreambuf_iterator<char>());
+            std::cerr << "Unable to open keyfile: " << keyfilePath << "\n";
+            return "";
         }
-        if (keyData.empty())
+        std::string keyData((std::istreambuf_iterator<char>(ifs)),
+                            std::istreambuf_iterator<char>());
+        ifs.close();
+        if (keyData.empty()) {
+            std::cerr << "Keyfile is empty: " << keyfilePath << "\n";
             return "";
+        }
+    
+        // Extract the filename (last component of the path).
+        std::filesystem::path p(keyfilePath);
+        std::string baseKeyfile = p.filename().string();
+        
+        // Ensure the filename follows the syntax: <username>_keyfile.pem
         size_t pos = baseKeyfile.find("_keyfile.pem");
-        if (pos == std::string::npos)
+        if (pos == std::string::npos) {
+            std::cerr << "Keyfile name does not follow the required format (<username>_keyfile.pem).\n";
             return "";
+        }
         std::string uname = baseKeyfile.substr(0, pos);
-
-        // Locate the per-user mapping file by scanning the user's root directory.
+    
+        // Verify the user's root directory exists.
         std::string userRootDir = "filesystem/" + SecOps::SecurityOps::sha256(uname);
         if (!std::filesystem::exists(userRootDir)) {
             std::cerr << "User root directory not found for " << uname << "\n";
             return "";
         }
+    
+        // Locate the per-user mapping file by scanning the user's root directory.
         std::string mappingFilePath = "";
         for (const auto &entry : std::filesystem::directory_iterator(userRootDir)) {
             if (!entry.is_directory()) {
@@ -147,6 +152,7 @@ namespace UOps {
             std::cerr << "Mapping file not found for user " << uname << "\n";
             return "";
         }
+    
         std::string encryptedMapping = Ops::FileOps::readFile(mappingFilePath);
         std::string decryptedMapping;
         try {
@@ -166,15 +172,23 @@ namespace UOps {
             std::cerr << "User mapping does not match for " << uname << "\n";
             return "";
         }
-        // Load the public key.
+        
+        // Load the user's public key from the PUBLIC_KEYS_DIR.
         std::string pubFilePath = PUBLIC_KEYS_DIR + "/" + uname + "_public.pem";
         std::ifstream pubFile(pubFilePath);
+        if (!pubFile) {
+            std::cerr << "Unable to open public key file for user " << uname << "\n";
+            return "";
+        }
         std::stringstream pubBuf;
         pubBuf << pubFile.rdbuf();
         std::string userPub = pubBuf.str();
+    
+        // Cache the user in the in-memory map.
         users[uname] = User{uname, keyData, userPub, false};
         return uname;
     }
+    
 
     /**
      * mapUser:
