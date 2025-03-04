@@ -2,74 +2,59 @@
 #define FILE_OPS_H
 
 #include <string>
-#include <filesystem>
-#include <fstream>
-#include <sstream>
 
 /**
- * The Ops namespace encapsulates basic file and directory operations.
+ * Namespace Ops encapsulates basic file and directory operations.
  */
 namespace Ops {
 
     /**
-     * FileOps provides static methods for reading and writing files,
-     * as well as creating directories and checking for file/directory existence.
+     * FileOps provides static methods for performing common file operations,
+     * such as reading, writing, and checking for the existence of files or directories,
+     * as well as creating directories.
      */
     class FileOps {
     public:
         /**
          * writeFile:
          * Writes the given data (in binary mode) to the specified file path.
-         * Returns true if the operation is successful.
+         * @param path: The path to the file where data will be written.
+         * @param data: The content to write to the file.
+         * @return true if writing succeeds; otherwise, false.
          */
-        static bool writeFile(const std::string &path, const std::string &data) {
-            std::ofstream ofs(path, std::ios::binary);
-            if (!ofs) return false;
-            ofs.write(data.data(), data.size());
-            return ofs.good();
-        }
+        static bool writeFile(const std::string &path, const std::string &data);
 
         /**
          * readFile:
-         * Reads the entire content of the file specified by path and returns it as a string.
+         * Reads the entire content of the file specified by path.
+         * @param path: The path to the file.
+         * @return The file content as a string; returns an empty string if the file cannot be opened.
          */
-        static std::string readFile(const std::string &path) {
-            std::ifstream ifs(path, std::ios::binary);
-            if (!ifs) return "";
-            std::stringstream buffer;
-            buffer << ifs.rdbuf();
-            return buffer.str();
-        }
+        static std::string readFile(const std::string &path);
 
         /**
          * makeDirectory:
-         * Creates a directory (and all necessary parent directories) specified by path.
-         * Returns true if the directory is successfully created.
+         * Creates a directory at the specified path, including all necessary parent directories.
+         * @param path: The directory path to create.
+         * @return true if the directory is successfully created; otherwise, false.
          */
-        static bool makeDirectory(const std::string &path) {
-            try {
-                std::filesystem::create_directories(path);
-                return true;
-            } catch (...) {
-                return false;
-            }
-        }
+        static bool makeDirectory(const std::string &path);
 
         /**
          * fileExists:
-         * Checks if a file exists at the specified path.
+         * Checks whether a file exists at the given path.
+         * @param path: The file path.
+         * @return true if the file exists and is a regular file; otherwise, false.
          */
-        static bool fileExists(const std::string &path) {
-            return std::filesystem::exists(path) && std::filesystem::is_regular_file(path);
-        }
+        static bool fileExists(const std::string &path);
 
         /**
          * directoryExists:
-         * Checks if a directory exists at the specified path.
+         * Checks whether a directory exists at the given path.
+         * @param path: The directory path.
+         * @return true if the directory exists; otherwise, false.
          */
-        static bool directoryExists(const std::string &path) {
-            return std::filesystem::exists(path) && std::filesystem::is_directory(path);
-        }
+        static bool directoryExists(const std::string &path);
     };
 
 } // namespace Ops
