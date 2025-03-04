@@ -3,25 +3,55 @@
 
 #include <string>
 
+/**
+ * Namespace Ops encapsulates basic file and directory I/O operations,
+ * such as reading/writing files and creating/checking directories.
+ */
 namespace Ops {
-    // This module wraps basic file and directory operations using the C++17 STL.
+
+    /**
+     * FileOps offers static methods for reading/writing files and handling directories.
+     */
     class FileOps {
     public:
-        // Writes data (in binary mode) to the specified file.
+        /**
+         * writeFile:
+         * Writes data (in binary mode) to the specified path.
+         * @param path File path.
+         * @param data Content to write.
+         * @return true if successful, false otherwise.
+         */
         static bool writeFile(const std::string &path, const std::string &data);
 
-        // Reads and returns the entire content of the file as a string.
+        /**
+         * readFile:
+         * Reads the entire file content from path.
+         * @param path File path.
+         * @return File content. Empty if not found or error.
+         */
         static std::string readFile(const std::string &path);
 
-        // Creates a directory and all its parent directories (if they don't exist).
+        /**
+         * makeDirectory:
+         * Creates a directory at path (including parents).
+         * @param path Directory path.
+         * @return true if successful, false otherwise.
+         */
         static bool makeDirectory(const std::string &path);
 
-        // Returns true if the specified file exists.
+        /**
+         * fileExists:
+         * Checks if a path exists and is a regular file.
+         */
         static bool fileExists(const std::string &path);
 
-        // Returns true if the specified directory exists.
+        /**
+         * directoryExists:
+         * Checks if path exists and is a directory.
+         */
         static bool directoryExists(const std::string &path);
     };
-}
+
+} // namespace Ops
 
 #endif
