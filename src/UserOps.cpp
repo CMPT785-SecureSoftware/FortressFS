@@ -62,6 +62,12 @@ namespace UOps {
         // Create per-user mapping file.
         std::string userRootDir = "filesystem/" + SecOps::SecurityOps::sha256(username);
         std::filesystem::create_directories(userRootDir);
+        // Create hashed "personal" and "shared" directories under userRootDir.
+        std::string personalDir = userRootDir + "/" + SecOps::SecurityOps::sha256("personal");
+        std::string sharedDir   = userRootDir + "/" + SecOps::SecurityOps::sha256("shared");
+        std::filesystem::create_directories(personalDir);
+        std::filesystem::create_directories(sharedDir);
+
         json userMapping;
         userMapping["username"] = username;
         // Files and directories are stored as { hash : [originalName, type] }.
