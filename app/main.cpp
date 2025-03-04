@@ -18,11 +18,13 @@ static const std::string ADMIN_KEYFILE    = "admin_keyfile.pem";
 
 /**
  * initFortress:
- * - Creates needed directories.
- * - If admin_keyfile.pem not found => first run => generate "admin_keyfile.pem" + "admin_public.pem", hashed directories for admin, exit(0).
- * - If found => do nothing.
+ * - Creates the necessary folder structure.
+ * - If admin keyfile does not exist, we unify logic by calling UserOps::createUser("admin").
+ *   That function will generate admin_keyfile.pem, move it to admin_keys, etc.
+ * - Then we exit to let the user re-run with admin's key.
  */
 static void initFortress() {
+    // Ensure the main directories exist
     if (!std::filesystem::exists(FILESYSTEM_DIR))
         std::filesystem::create_directories(FILESYSTEM_DIR);
 
@@ -35,103 +37,37 @@ static void initFortress() {
     if (!std::filesystem::exists(PUBLIC_KEYS_DIR))
         std::filesystem::create_directories(PUBLIC_KEYS_DIR);
 
+    // Check if admin's keyfile is present
     std::string adminPath = ADMIN_KEYS_DIR + "/" + ADMIN_KEYFILE;
     if (!std::filesystem::exists(adminPath)) {
-        // first run => create admin
-        std::cout << "No admin keyfile found. Generating admin keypair...\n";
-        if (!SecOps::SecurityOps::generateRSAKeyPair("admin")) {
-            std::cerr << "Failed to generate admin key pair\n";
+        std::cout << "No admin keyfile found. Creating admin user via createUser(\"admin\")...\n";
+
+        // We call createUser("admin") in unified logic
+        if (!UOps::UserOps::createUser("admin")) {
+            std::cerr << "Failed to create admin user!\n";
             exit(1);
         }
-        // read "admin_keyfile.pem"
-        std::ifstream ifs("admin_keyfile.pem");
-        if (!ifs) {
-            std::cerr << "Failed to read admin_keyfile.pem\n";
+
+        std::string keyfileFrom = PRIVATE_KEYS_DIR + "/admin_keyfile.pem";
+        if (!std::filesystem::exists(keyfileFrom)) {
+            std::cerr << "admin_keyfile.pem was not generated in private_keys for some reason.\n";
             exit(1);
         }
-        std::stringstream ss;
-        ss << ifs.rdbuf();
-        std::string adminPriv = ss.str();
-        ifs.close();
-
-        // move it to adminKeys dir
-        std::ofstream ofs(adminPath, std::ios::binary);
-        if (!ofs) {
-            std::cerr << "Failed to write " << adminPath << "\n";
-            exit(1);
-        }
-        ofs << adminPriv;
-        ofs.close();
-        std::filesystem::remove("admin_keyfile.pem");
-
-        // rename admin_public.pem => public_keys/admin_public.pem
-        std::string pubSrc = "admin_public.pem";
-        std::string pubDst = PUBLIC_KEYS_DIR + "/admin_public.pem";
-        std::filesystem::rename(pubSrc, pubDst);
-
-        // create hashed "admin" folder
-        std::string adminDir = FILESYSTEM_DIR + "/" + SecOps::SecurityOps::sha256("admin");
-        std::filesystem::create_directories(adminDir);
-        std::string personalDir = adminDir + "/" + SecOps::SecurityOps::sha256("personal");
-        std::string sharedDir   = adminDir + "/" + SecOps::SecurityOps::sha256("shared");
-        std::filesystem::create_directories(personalDir);
-        std::filesystem::create_directories(sharedDir);
-
-        // put admin in memory
-        UOps::UserOps::users["admin"] = UOps::User{"admin", adminPriv, admin, true};
-
-        // create admin's per-user mapping
-        json adminMapping;
-        adminMapping["username"] = "admin";
-        adminMapping["files"]    = json::object();
-        std::string mappingStr = adminMapping.dump(4);
-
-        // read the new admin_public.pem
-        std::ifstream pubF(pubDst);
-        if (!pubF) {
-            std::cerr << "Failed to read " << pubDst << "\n";
-            exit(1);
-        }
-        std::stringstream pubSS;
-        pubSS << pubF.rdbuf();
-        std::string adminPub = pubSS.str();
-        pubF.close();
-
-        // encrypt & store in adminDir
-        std::string mappingFileName = SecOps::SecurityOps::sha256("user_file_mapping.json");
-        std::string mappingFilePath = adminDir + "/" + mappingFileName;
-        std::string encMapping = SecOps::SecurityOps::rsaEncrypt(mappingStr, adminPub);
-        Ops::FileOps::writeFile(mappingFilePath, encMapping);
-
-        // update global mapping
-        UOps::UserOps::mapUser("admin", adminPub);
-
-        // create admin_mapping.json => AES with adminPriv
-        json admMap;
-        admMap["admin"] = adminPriv;
-        std::string admMapStr = admMap.dump(4);
-        std::string key = adminPriv.substr(0, 32); 
-        std::string encAdmMap = SecOps::SecurityOps::aesEncrypt(admMapStr, key);
-        std::string adminMappingFile = SecOps::SecurityOps::sha256("admin_mapping.json");
-        std::string adminMappingPath = FILESYSTEM_DIR + "/" + adminMappingFile;
-        Ops::FileOps::writeFile(adminMappingPath, encAdmMap);
+        // Move it to admin_keys
+        std::filesystem::rename(keyfileFrom, adminPath);
 
         std::cout << "Admin user created.\n";
         std::cout << "Admin private key stored in " << adminPath << "\n";
-        std::cout << "Admin public key stored in " << pubDst << "\n";
-        std::cout << "Please secure your admin keyfile.\n";
-        std::cout << "Exiting now. Next run: ./<program> <admin_keyfile_path>\n";
+        std::cout << "Please secure your admin keyfile. Exiting now.\n";
         exit(0);
     }
-
-    // subsequent run => do nothing
 }
 
 int main(int argc, char** argv) {
-    // ensure fortress structure, possibly create admin
+    // Initialize fortress
     initFortress();
 
-    // subsequent run => need keyfile
+    // On subsequent runs, we expect a keyfile argument
     if (argc < 2) {
         std::cout << "Usage: " << argv[0] << " <keyfile_name>\n";
         return 1;
@@ -141,12 +77,14 @@ int main(int argc, char** argv) {
     std::string keyfileName = argv[1];
     std::string user = UOps::UserOps::login(keyfileName);
     if (user.empty()) {
+        // We only print "Invalid keyfile" to the user, while details go to error.log
         std::cout << "Invalid keyfile\n";
         return 1;
     }
+
     std::cout << "Logged in as " << user << "\n";
 
-    // ensure hashed personal & shared exist
+    // For convenience, ensure hashed personal/shared exist
     std::string userDir = FILESYSTEM_DIR + "/" + SecOps::SecurityOps::sha256(user);
     if (!std::filesystem::exists(userDir)) {
         std::filesystem::create_directories(userDir);
@@ -160,6 +98,7 @@ int main(int argc, char** argv) {
         std::filesystem::create_directories(sharedDir);
     }
 
+    // Start the interactive shell
     Shell::InteractiveShell shell(user);
     shell.start();
 

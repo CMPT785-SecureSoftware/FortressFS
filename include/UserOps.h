@@ -10,13 +10,6 @@
  */
 namespace UOps {
 
-    /**
-     * User structure contains:
-     *  - username
-     *  - privateKey (the actual RSA private key content)
-     *  - publicKey
-     *  - isAdmin (true for admin)
-     */
     struct User {
         std::string username;
         std::string privateKey;
@@ -24,14 +17,6 @@ namespace UOps {
         bool isAdmin;
     };
 
-    /**
-     * UserOps provides:
-     *  - createUser
-     *  - login
-     *  - mapUser / updateAdminMapping
-     *  - getUser / userExists
-     * and keeps an in-memory cache of User objects.
-     */
     class UserOps {
     public:
         // createUser: generates keys, moves them, updates global mapping, etc.
@@ -54,6 +39,23 @@ namespace UOps {
 
         // The in-memory cache of users. Key is username.
         static std::unordered_map<std::string, User> users;
+
+    private:
+        /**
+         * createUserFileMapping:
+         * Creates a JSON describing the user_file_mapping (root hash, personal hash, subfolders, etc.),
+         * encrypts it with the user's publicKey, and writes it to the user's root folder. 
+         * This ensures that a user_file_mapping.json is present in an encrypted form.
+         */
+        static bool createUserFileMapping(const std::string &username, const std::string &userPub);
+
+        /**
+         * loadUserFileMapping:
+         * Reads the encrypted user_file_mapping from the user's root, 
+         * decrypts with userPriv, and returns the parsed JSON. 
+         * If anything fails, returns an empty object.
+         */
+        static nlohmann::json loadUserFileMapping(const std::string &username, const std::string &userPriv);
     };
 }
 
