@@ -56,7 +56,7 @@ namespace {
         CMD_HELP
     };
 
-    // Updated getCommand: now the unordered_map directly maps to Command
+    // getCommand: maps input strings to Command enum.
     Command getCommand(const std::string &cmd) {
         static const std::unordered_map<std::string, Command> cmdMap = {
             {"cd", CMD_CD},
@@ -107,36 +107,37 @@ std::string InteractiveShell::resolvePath(const std::string &vpath) {
     if (vpath.rfind("/shared", 0) == 0) {
         json global = loadGlobalMapping();
         std::string sharedHash;
-        if (global.contains(activeUser) && global[activeUser].contains("shared")){
+        if (global.contains(activeUser) && global[activeUser].contains("shared"))
             sharedHash = global[activeUser]["shared"];
-            //std::cout << "Shared hash: " << sharedHash << "\n";
-        }
         else
             sharedHash = SecOps::SecurityOps::sha256("shared"); // fallback default
 
-        std::string rootHash;
-        rootHash = global[activeUser]["root"];
+        std::string rootHash = global[activeUser]["root"];
         std::string base = FILESYSTEM_DIR + "/" + rootHash + "/" + sharedHash;
-        //std::cout << "Base: " << base << "\n";
+        // If the virtual path is exactly "/shared", return base.
+        if(vpath == "/shared" || vpath == "shared")
+            return base;
         std::istringstream iss(vpath);
         std::string token;
+        // Skip the leading "/" and then "shared"
+        std::getline(iss, token, '/'); // May be empty.
+        std::getline(iss, token, '/'); // This should be "shared"
         std::string path = base;
-        std::getline(iss, token, '/'); // Skip "/shared"
-        std::getline(iss, token, '/'); // Skip "shared"
         while (std::getline(iss, token, '/')) {
             if (token.empty() || token == ".") continue;
             if (token == "..") {
                 size_t pos = path.find_last_of('/');
-                if (pos != std::string::npos) path = path.substr(0, pos);
+                if (pos != std::string::npos)
+                    path = path.substr(0, pos);
             } else {
                 path += "/" + SecOps::SecurityOps::sha256(token);
             }
         }
-        //std::cout << "Path: " << path << "\n";
         return path;
     } else {
         std::string base = FILESYSTEM_DIR + "/" + SecOps::SecurityOps::sha256(activeUser);
-        if (vpath.empty() || vpath == "/") return base;
+        if (vpath.empty() || vpath == "/")
+            return base;
         std::istringstream iss(vpath);
         std::string token;
         std::string path = base;
@@ -144,7 +145,8 @@ std::string InteractiveShell::resolvePath(const std::string &vpath) {
             if (token.empty() || token == ".") continue;
             if (token == "..") {
                 size_t pos = path.find_last_of('/');
-                if (pos != std::string::npos) path = path.substr(0, pos);
+                if (pos != std::string::npos)
+                    path = path.substr(0, pos);
             } else {
                 path += "/" + SecOps::SecurityOps::sha256(token);
             }
@@ -185,7 +187,7 @@ std::string InteractiveShell::normalizePath(const std::string &path) {
  *   * At admin's own root ("/"), "cd shared" or "cd personal" is allowed (creating the folder if it doesn’t exist).
  *   * "cd .." at admin's root switches to filesystem view.
  *   * In filesystem view, "cd <username>" lets admin view that user's directory.
- *   * When admin is viewing a user, "cd .." at "/" returns to filesystem view.
+ *   * When admin is viewing a user, "cd .." from "/" returns to filesystem view.
  */
 void InteractiveShell::handle_cd(const std::string &arg) {
     if (arg.empty()) return;
@@ -203,7 +205,7 @@ void InteractiveShell::handle_cd(const std::string &arg) {
             std::string dirHash = SecOps::SecurityOps::sha256(target);
             std::string realPath = FILESYSTEM_DIR + "/" + userHash + "/" + dirHash;
             if (!Ops::FileOps::directoryExists(realPath)) {
-                std::cout << "Directory does not exist.\n";
+                Ops::FileOps::makeDirectory(realPath);
             }
             currentDir = "/" + target;
             return;
@@ -216,7 +218,7 @@ void InteractiveShell::handle_cd(const std::string &arg) {
             std::string newPath = "/" + target;
             std::string realPath = resolvePath(newPath);
             if (!Ops::FileOps::directoryExists(realPath)) {
-                std::cout << "Directory does not exist.\n";
+                Ops::FileOps::makeDirectory(realPath);
             }
             currentDir = newPath;
             return;
@@ -357,11 +359,8 @@ void InteractiveShell::handle_ls() {
         std::cout << "shared\n";
         return;
     }
-    std::cout << "Listing directory: " << currentDir << "\n";
     std::string realDir = resolvePath(currentDir);
-    std::cout << "Real directory: " << realDir << "\n";
     if (!Ops::FileOps::directoryExists(realDir)) {
-        std::cout << "Hi there\n";
         std::cout << "Directory does not exist.\n";
         return;
     }
@@ -383,17 +382,12 @@ void InteractiveShell::handle_ls() {
     }
     // In personal directory, load user_file_mapping to list original names.
     if (isInPersonalDirectory(currentDir)) {
-        std::cout<< "In personal directory\n";
         json filemap = UOps::UserOps::loadUserFileMappingPublic(activeUser, UOps::UserOps::getUser(activeUser).privateKey);
         if (filemap.empty() || !filemap.contains("entries")) {
-            std::cout << "No entries.\n";
             for (auto &entry : std::filesystem::directory_iterator(realDir)) {
                 std::cout << entry.path().filename().string() << "\n";
             }
             return;
-        }
-        else {
-            std::cout << "Entries found\n";
         }
         for (auto &item : filemap["entries"].items()) {
             if (item.value().contains("name") && item.value().contains("type")) {
@@ -443,11 +437,9 @@ void InteractiveShell::handle_cat(const std::string &filename) {
             std::cout << filename << " doesn't exist on disk\n";
             return;
         }
-        std::string userKey = UOps::UserOps::getUser(activeUser).privateKey;
-        std::string aesKey = userKey.substr(0, 32);
-        std::string enc = Ops::FileOps::readFile(realFile);
+        std::string userPriv = UOps::UserOps::getUser(activeUser).privateKey;
         try {
-            std::string dec = SecOps::SecurityOps::aesDecrypt(enc, aesKey);
+            std::string dec = SecOps::SecurityOps::hybridDecrypt(Ops::FileOps::readFile(realFile), userPriv);
             std::cout << dec << "\n";
         } catch(...) {
             std::cout << "Error decrypting file.\n";
@@ -460,11 +452,9 @@ void InteractiveShell::handle_cat(const std::string &filename) {
             std::cout << filename << " doesn't exist\n";
             return;
         }
-        std::string userKey = UOps::UserOps::getUser(activeUser).privateKey;
-        std::string aesKey = userKey.substr(0, 32);
-        std::string enc = Ops::FileOps::readFile(realFile);
+        std::string userPriv = UOps::UserOps::getUser(activeUser).privateKey;
         try {
-            std::string dec = SecOps::SecurityOps::aesDecrypt(enc, aesKey);
+            std::string dec = SecOps::SecurityOps::hybridDecrypt(Ops::FileOps::readFile(realFile), userPriv);
             std::cout << dec << "\n";
         } catch(...) {
             std::cout << "Error decrypting file.\n";
@@ -475,6 +465,12 @@ void InteractiveShell::handle_cat(const std::string &filename) {
 /**
  * handle_share:
  * Shares a file from the user's personal directory to another user's shared folder.
+ * The process is as follows:
+ * 1. Read the file from the current user's personal directory.
+ * 2. Decrypt the file using hybridDecrypt with the source user's private key.
+ * 3. Encrypt the plaintext using hybridEncrypt with the target user's public key.
+ * 4. Write the resulting ciphertext into the target user's shared folder.
+ * 5. Update global_mapping.json with the shared file entry.
  */
 void InteractiveShell::handle_share(const std::string &args) {
     std::istringstream iss(args);
@@ -495,22 +491,59 @@ void InteractiveShell::handle_share(const std::string &args) {
         std::cout << "File " << filename << " doesn't exist\n";
         return;
     }
-    json global = loadGlobalMapping();
-    if (!global.contains(targetUser)) {
-        std::cout << "User " << targetUser << " doesn't exist in global mapping.\n";
+    // First, decrypt the file using the source user's private key.
+    std::string activeUser = (currentUser == "admin" && !viewedUser.empty()) ? viewedUser : currentUser;
+    std::string sourcePriv = UOps::UserOps::getUser(activeUser).privateKey;
+    std::string plaintext;
+    try {
+        plaintext = SecOps::SecurityOps::hybridDecrypt(Ops::FileOps::readFile(realFile), sourcePriv);
+    } catch(std::exception &e) {
+        std::cout << "Error decrypting file for sharing.\n";
         return;
     }
-    std::string data = Ops::FileOps::readFile(realFile);
+    // Obtain the target user's public key from PUBLIC_KEYS_DIR.
+    std::string targetPubFile = "public_keys/" + targetUser + "_public.pem";
+    std::ifstream targetPubStream(targetPubFile);
+    if (!targetPubStream) {
+        std::cout << "Target user public key not found.\n";
+        return;
+    }
+    std::stringstream targetPubBuf;
+    targetPubBuf << targetPubStream.rdbuf();
+    std::string targetPub = targetPubBuf.str();
+    targetPubStream.close();
+    // Encrypt the plaintext with the target user's public key using hybrid encryption.
+    std::string newCipher;
+    try {
+        newCipher = SecOps::SecurityOps::hybridEncrypt(plaintext, targetPub);
+    } catch(std::exception &e) {
+        std::cout << "Error encrypting file for target user.\n";
+        return;
+    }
+    // Update global mapping: add the shared file entry.
+    json global = loadGlobalMapping();
     std::string hashedName = SecOps::SecurityOps::sha256(filename);
     global[targetUser]["shared_files"][hashedName] = filename;
     saveGlobalMapping(global);
-    std::string targetSharedHash = global[targetUser]["shared"];
+    // Write the new ciphertext to the target user's shared folder.
+    std::string targetSharedHash;
+    if (global.contains(targetUser) && global[targetUser].contains("shared"))
+        targetSharedHash = global[targetUser]["shared"];
+    else
+        targetSharedHash = SecOps::SecurityOps::sha256("shared");
     std::string targetDir = FILESYSTEM_DIR + "/" + SecOps::SecurityOps::sha256(targetUser) + "/" + targetSharedHash;
+    if (!Ops::FileOps::directoryExists(targetDir)) {
+        Ops::FileOps::makeDirectory(targetDir);
+    }
     std::string targetFile = targetDir + "/" + hashedName;
-    Ops::FileOps::writeFile(targetFile, data);
+    Ops::FileOps::writeFile(targetFile, newCipher);
     std::cout << "Shared file with " << targetUser << " at /shared/" << filename << "\n";
 }
 
+/**
+ * handle_mkdir:
+ * Creates a new directory in the user's personal folder.
+ */
 void InteractiveShell::handle_mkdir(const std::string &dirname) {
     if (dirname.empty()) {
         std::cout << "Usage: mkdir <directory_name>\n";
@@ -526,7 +559,7 @@ void InteractiveShell::handle_mkdir(const std::string &dirname) {
     }
     std::string realDir = resolvePath(currentDir);
     if (!Ops::FileOps::directoryExists(realDir)) {
-        std::cout << "Directory does npweot exist.\n";
+        std::cout << "Directory does not exist.\n";
         return;
     }
     std::string hashed = SecOps::SecurityOps::sha256(dirname);
@@ -549,6 +582,12 @@ void InteractiveShell::handle_mkdir(const std::string &dirname) {
     }
 }
 
+/**
+ * handle_mkfile:
+ * Creates a new file in the user's personal folder using hybrid encryption.
+ * The file content is encrypted with a random AES key which is RSA-encrypted with the user's public key.
+ * The resulting ciphertext is stored on disk, and the user_file_mapping is updated.
+ */
 void InteractiveShell::handle_mkfile(const std::string &args) {
     std::istringstream iss(args);
     std::string filename;
@@ -571,11 +610,11 @@ void InteractiveShell::handle_mkfile(const std::string &args) {
     }
     std::string hashed = SecOps::SecurityOps::sha256(filename);
     std::string activeUser = (currentUser == "admin" && !viewedUser.empty()) ? viewedUser : currentUser;
-    std::string userKey = UOps::UserOps::getUser(activeUser).privateKey;
-    std::string aesKey = userKey.substr(0, 32);
+    // Get target user's public key for hybrid encryption.
+    std::string userPub = UOps::UserOps::getUser(activeUser).publicKey;
     std::string enc;
     try {
-        enc = SecOps::SecurityOps::aesEncrypt(content, aesKey);
+        enc = SecOps::SecurityOps::hybridEncrypt(content, userPub);
     } catch(...) {
         std::cout << "Error encrypting file.\n";
         return;
@@ -590,13 +629,16 @@ void InteractiveShell::handle_mkfile(const std::string &args) {
     std::cout << "Created file " << filename << "\n";
     // Update the user_file_mapping "entries" for the active user.
     json mapping = UOps::UserOps::loadUserFileMappingPublic(activeUser, UOps::UserOps::getUser(activeUser).privateKey);
-    // Add or update the entry for this file.
     mapping["entries"][hashed] = { {"name", filename}, {"type", "f"} };
     if (!UOps::UserOps::saveUserFileMappingPublic(activeUser, UOps::UserOps::getUser(activeUser).publicKey, mapping)) {
         std::cout << "Warning: Failed to update file mapping.\n";
     }
 }
 
+/**
+ * handle_adduser:
+ * Admin-only command to create a new user.
+ */
 void InteractiveShell::handle_adduser(const std::string &username) {
     if (currentUser != "admin") {
         std::cout << "Forbidden: only admin can add users\n";
@@ -622,6 +664,10 @@ void InteractiveShell::handle_adduser(const std::string &username) {
     std::cout << "User " << username << " created.\n";
 }
 
+/**
+ * showHelp:
+ * Displays available commands based on the user's role and current directory.
+ */
 void InteractiveShell::showHelp() {
     if (currentUser == "admin") {
         if (isAdminFSMode) {

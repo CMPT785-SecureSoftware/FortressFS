@@ -279,4 +279,54 @@ std::string SecurityOps::sha256(const std::string &data) {
     return ss.str();
 }
 
+/**
+ * hybridEncrypt:
+ * Implements hybrid encryption:
+ * 1. Generate a random 32-byte AES key.
+ * 2. Encrypt the plaintext using AES-256-CBC.
+ * 3. Encrypt the AES key using RSA with the provided public key.
+ * 4. Return the concatenation: [RSA-encrypted AES key (256 bytes)] || [AES ciphertext].
+ */
+std::string SecurityOps::hybridEncrypt(const std::string &plaintext, const std::string &publicKeyPem) {
+    // Generate random 32-byte AES key.
+    unsigned char aesKey[32];
+    if (!RAND_bytes(aesKey, sizeof(aesKey)))
+        throw std::runtime_error("Failed to generate AES key: " + getOpenSSLError());
+    std::string aesKeyStr(reinterpret_cast<char*>(aesKey), 32);
+
+    // Encrypt the plaintext using AES.
+    std::string aesCiphertext = aesEncrypt(plaintext, aesKeyStr);
+
+    // Encrypt the AES key using RSA with the public key.
+    std::string encAesKey = rsaEncrypt(aesKeyStr, publicKeyPem);
+    // For a 2048-bit RSA key, encAesKey should be 256 bytes.
+
+    // Concatenate the RSA-encrypted AES key and the AES ciphertext.
+    return encAesKey + aesCiphertext;
+}
+
+/**
+ * hybridDecrypt:
+ * Implements hybrid decryption:
+ * 1. Extract the first 256 bytes as the RSA-encrypted AES key.
+ * 2. RSA-decrypt to recover the AES key using the provided private key.
+ * 3. Decrypt the remaining ciphertext with AES-256-CBC.
+ */
+std::string SecurityOps::hybridDecrypt(const std::string &ciphertext, const std::string &privateKeyPem) {
+    // For a 2048-bit RSA key, the RSA-encrypted AES key is 256 bytes.
+    if (ciphertext.size() < 256)
+        throw std::runtime_error("Ciphertext too short for hybrid decryption.");
+
+    std::string encAesKey = ciphertext.substr(0, 256);
+    std::string aesCiphertext = ciphertext.substr(256);
+
+    // RSA-decrypt the AES key.
+    std::string aesKeyStr = rsaDecrypt(encAesKey, privateKeyPem);
+    if (aesKeyStr.size() != 32)
+        throw std::runtime_error("Recovered AES key size is incorrect.");
+
+    // Decrypt the AES ciphertext.
+    return aesDecrypt(aesCiphertext, aesKeyStr);
+}
+
 } // namespace SecOps

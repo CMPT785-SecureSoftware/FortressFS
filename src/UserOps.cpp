@@ -20,7 +20,10 @@ static const std::string ADMIN_KEYS_DIR   = "admin_keys"; // For admin's final p
 /**
  * createUserFileMapping:
  * Creates a JSON object describing the user_file_mapping (root folder, personal folder, etc.),
- * then encrypts it using the user's public key and writes it to userRoot/<sha256("user_file_mapping.json")>.
+ * then encrypts it using a hybrid approach.
+ * The hybridEncrypt function generates a random AES key, encrypts the plaintext with AES,
+ * then encrypts the AES key with RSA (using the user's public key).
+ * The output is stored as the file named sha256("user_file_mapping.json") under filesystem/<sha256(username)>.
  */
 bool UserOps::createUserFileMapping(const std::string &username, const std::string &userPub) {
     std::string userRoot = "filesystem/" + SecOps::SecurityOps::sha256(username);
@@ -39,9 +42,10 @@ bool UserOps::createUserFileMapping(const std::string &username, const std::stri
     std::string plain = mapping.dump(4);
     std::string encrypted;
     try {
-        encrypted = SecOps::SecurityOps::rsaEncrypt(plain, userPub);
+        // Use hybrid encryption: encrypt plain using a random AES key and RSA encrypt that AES key.
+        encrypted = SecOps::SecurityOps::hybridEncrypt(plain, userPub);
     } catch(std::exception &e) {
-        Ops::FileOps::appendErrorLog("[Debug] createUserFileMapping: rsaEncrypt failed: " + std::string(e.what()));
+        Ops::FileOps::appendErrorLog("[Debug] createUserFileMapping: hybridEncrypt failed: " + std::string(e.what()));
         return false;
     }
     if (!Ops::FileOps::writeFile(filePath, encrypted)) {
@@ -55,7 +59,8 @@ bool UserOps::createUserFileMapping(const std::string &username, const std::stri
  * loadUserFileMappingPublic:
  * Public method to load and decrypt the user's file mapping.
  * Reads the encrypted file from filesystem/<sha256(username)>/<sha256("user_file_mapping.json")>,
- * decrypts it using the provided user private key, and returns the parsed JSON.
+ * then uses hybridDecrypt (which first RSA-decrypts the AES key with the user's private key,
+ * and then uses that AES key to decrypt the actual JSON mapping).
  * Returns an empty JSON object if any step fails.
  */
 json UserOps::loadUserFileMappingPublic(const std::string &username, const std::string &userPriv) {
@@ -74,9 +79,9 @@ json UserOps::loadUserFileMappingPublic(const std::string &username, const std::
     }
     std::string decrypted;
     try {
-        decrypted = SecOps::SecurityOps::rsaDecrypt(encData, userPriv);
+        decrypted = SecOps::SecurityOps::hybridDecrypt(encData, userPriv);
     } catch(std::exception &e) {
-        Ops::FileOps::appendErrorLog("[Debug] loadUserFileMappingPublic: rsaDecrypt failed: " + std::string(e.what()));
+        Ops::FileOps::appendErrorLog("[Debug] loadUserFileMappingPublic: hybridDecrypt failed: " + std::string(e.what()));
         return empty;
     }
     json j;
@@ -92,6 +97,7 @@ json UserOps::loadUserFileMappingPublic(const std::string &username, const std::
 /**
  * saveUserFileMappingPublic:
  * Helper to re-encrypt and save the user's file mapping.
+ * Uses hybridEncrypt to encrypt the mapping JSON (after dumping it as a string) with the user's public key.
  */
 bool UserOps::saveUserFileMappingPublic(const std::string &username, const std::string &userPub, const json &mapping) {
     std::string userRoot = "filesystem/" + SecOps::SecurityOps::sha256(username);
@@ -100,9 +106,9 @@ bool UserOps::saveUserFileMappingPublic(const std::string &username, const std::
     std::string plain = mapping.dump(4);
     std::string encrypted;
     try {
-        encrypted = SecOps::SecurityOps::rsaEncrypt(plain, userPub);
+        encrypted = SecOps::SecurityOps::hybridEncrypt(plain, userPub);
     } catch(std::exception &e) {
-        Ops::FileOps::appendErrorLog("[Debug] saveUserFileMappingPublic: rsaEncrypt failed: " + std::string(e.what()));
+        Ops::FileOps::appendErrorLog("[Debug] saveUserFileMappingPublic: hybridEncrypt failed: " + std::string(e.what()));
         return false;
     }
     if (!Ops::FileOps::writeFile(filePath, encrypted)) {
@@ -181,7 +187,6 @@ bool UserOps::createUser(const std::string &username) {
     }
     bool adminFlag = (username == "admin");
     users[username] = User{username, userPriv, userPub, adminFlag};
-    //std::cout << "Created user: " << username << "\n";
     return true;
 }
 
@@ -189,9 +194,9 @@ bool UserOps::createUser(const std::string &username) {
  * login:
  * - Reads the entire keyfile.
  * - Extracts the username from the keyfile name (<username>_keyfile.pem).
- * - Loads and decrypts the user_file_mapping using the keyfile content.
- * - Verifies the mapping contains the correct username.
- * - Reads the user's public key.
+ * - Loads and decrypts the user_file_mapping using the keyfile content via hybrid decryption.
+ * - Verifies that the mapping contains the correct username.
+ * - Reads the corresponding public key.
  * - Caches the user in memory and returns the username.
  * - Returns an empty string if any step fails.
  */
@@ -221,7 +226,7 @@ std::string UserOps::login(const std::string &keyfilePath) {
         Ops::FileOps::appendErrorLog("[Debug] login: user root not found for " + uname);
         return "";
     }
-    // Load the user_file_mapping.
+    // Load the user_file_mapping using hybrid decryption.
     json mapping = loadUserFileMappingPublic(uname, keyData);
     if (mapping.empty()) {
         Ops::FileOps::appendErrorLog("[Debug] login: user_file_mapping is empty for " + uname);
