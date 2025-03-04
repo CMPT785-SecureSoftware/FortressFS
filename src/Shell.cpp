@@ -357,6 +357,7 @@ void InteractiveShell::handle_ls() {
     }
     std::cout << "Listing directory: " << currentDir << "\n";
     std::string realDir = resolvePath(currentDir);
+    std::cout << "Real directory: " << realDir << "\n";
     if (!Ops::FileOps::directoryExists(realDir)) {
         std::cout << "Directory does not exist.\n";
         return;
