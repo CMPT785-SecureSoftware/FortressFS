@@ -18,11 +18,14 @@ static const std::string ADMIN_KEYFILE = "admin_keyfile.pem";
 
 /**
  * initFortress:
- *  - Creates the necessary folder structure.
- *  - If the admin keyfile does not exist, generates admin keys,
- *    creates admin's hashed directories, creates admin's per-user mapping file
- *    (named as hash("admin_file_mapping.json")), and updates the global mapping.
- *  - Exits after admin creation.
+ * - Creates necessary directories.
+ * - If the admin keyfile does not exist, generates admin keys,
+ *   creates admin's hashed directories, creates admin's per-user mapping file
+ *   (named as sha256("admin_file_mapping.json")) in admin's root, and updates global mapping.
+ * - Also creates admin_mapping.json (filename = sha256("admin_mapping.json")) in FILESYSTEM_DIR.
+ *   This file maps usernames to their private keys and is encrypted using AES with a key
+ *   derived from admin's private key. It is not listed by ls.
+ * - Exits after admin creation.
  */
 static void initFortress() {
     if (!std::filesystem::exists(FILESYSTEM_DIR))
@@ -44,7 +47,6 @@ static void initFortress() {
             std::cerr << "Failed to generate admin key pair\n";
             exit(1);
         }
-        // Read and store admin's private key.
         std::ifstream ifs("admin_private.pem");
         std::stringstream ss;
         ss << ifs.rdbuf();
@@ -53,7 +55,6 @@ static void initFortress() {
         ofs << adminPriv;
         ofs.close();
         std::filesystem::remove("admin_private.pem");
-        // Move admin's public key.
         std::string pubSrc = "admin_public.pem";
         std::string pubDst = PUBLIC_KEYS_DIR + "/admin_public.pem";
         std::filesystem::rename(pubSrc, pubDst);
@@ -70,18 +71,25 @@ static void initFortress() {
         adminMapping["username"] = "admin";
         adminMapping["files"] = json::object();
         std::string mappingStr = adminMapping.dump(4);
-        // Load admin's public key.
         std::ifstream pubFile(pubDst);
         std::stringstream pubSS;
         pubSS << pubFile.rdbuf();
         std::string adminPub = pubSS.str();
-        // Compute mapping file name as hash("admin_file_mapping.json").
         std::string mappingFileName = SecOps::SecurityOps::sha256("admin_file_mapping.json");
         std::string mappingFilePath = adminDir + "/" + mappingFileName;
         std::string encryptedMapping = SecOps::SecurityOps::rsaEncrypt(mappingStr, adminPub);
         Ops::FileOps::writeFile(mappingFilePath, encryptedMapping);
         // Update global mapping for admin.
         UOps::UserOps::mapUser("admin", adminPub);
+        // Create admin_mapping.json in FILESYSTEM_DIR.
+        json admMap;
+        admMap["admin"] = adminPriv;  // Initially only admin is present.
+        std::string admMapStr = admMap.dump(4);
+        std::string key = adminPriv.substr(0, 32);  // Derive AES key from admin's private key.
+        std::string encryptedAdmMap = SecOps::SecurityOps::aesEncrypt(admMapStr, key);
+        std::string adminMappingFile = SecOps::SecurityOps::sha256("admin_mapping.json");
+        std::string adminMappingPath = FILESYSTEM_DIR + "/" + adminMappingFile;
+        Ops::FileOps::writeFile(adminMappingPath, encryptedAdmMap);
         std::cout << "Admin user created.\n";
         std::cout << "Admin private key stored in " << adminPath << "\n";
         std::cout << "Admin public key stored in " << pubDst << "\n";
@@ -92,9 +100,9 @@ static void initFortress() {
 
 /**
  * main:
- *  - Initializes the fortress.
- *  - Expects a keyfile as a command-line argument.
- *  - Logs in the user and launches the interactive shell.
+ * - Initializes the fortress.
+ * - Expects a keyfile as a command-line argument.
+ * - Logs in the user and launches the interactive shell.
  */
 int main(int argc, char **argv) {
     initFortress();

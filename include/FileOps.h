@@ -1,26 +1,33 @@
-#ifndef FILE_OPS_H
-#define FILE_OPS_H
+#ifndef SECURITY_OPS_H
+#define SECURITY_OPS_H
 
 #include <string>
 
-namespace Ops {
-    // This module wraps basic file and directory operations using the C++17 STL.
-    class FileOps {
+namespace SecOps {
+
+    /**
+     * SecurityOps provides cryptographic functions:
+     * - RSA key pair generation and RSA encryption/decryption using OAEP padding.
+     * - AES-256-CBC encryption/decryption.
+     * - SHA-256 hashing.
+     */
+    class SecurityOps {
     public:
-        // Writes data (in binary mode) to the specified file.
-        static bool writeFile(const std::string &path, const std::string &data);
+        // Generate a 2048-bit RSA key pair and write keys to files:
+        // "<username>_private.pem" and "<username>_public.pem".
+        static bool generateRSAKeyPair(const std::string &username);
 
-        // Reads and returns the entire content of the file as a string.
-        static std::string readFile(const std::string &path);
+        // RSA encryption and decryption functions.
+        static std::string rsaEncrypt(const std::string &plaintext, const std::string &publicKeyPem);
+        static std::string rsaDecrypt(const std::string &ciphertext, const std::string &privateKeyPem);
 
-        // Creates a directory and all its parent directories (if they don't exist).
-        static bool makeDirectory(const std::string &path);
+        // AES-256-CBC encryption and decryption functions.
+        // The provided key must be exactly 32 bytes.
+        static std::string aesEncrypt(const std::string &plaintext, const std::string &key);
+        static std::string aesDecrypt(const std::string &ciphertext, const std::string &key);
 
-        // Returns true if the specified file exists.
-        static bool fileExists(const std::string &path);
-
-        // Returns true if the specified directory exists.
-        static bool directoryExists(const std::string &path);
+        // Compute SHA-256 hash of the given data and return its hexadecimal string.
+        static std::string sha256(const std::string &data);
     };
 }
 

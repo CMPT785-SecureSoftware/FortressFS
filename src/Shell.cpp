@@ -12,10 +12,10 @@
 using json = nlohmann::json;
 
 namespace {
-    // Global mapping file (combines base directory and shared file info).
+    // Global mapping file for base directories and shared files.
     static const std::string GLOBAL_MAPPING_FILE = "global_mapping.json";
 
-    // Load the global mapping JSON.
+    // Loads the global mapping JSON.
     json loadGlobalMapping() {
         std::ifstream ifs(GLOBAL_MAPPING_FILE);
         if (!ifs) return json::object();
@@ -24,7 +24,7 @@ namespace {
         return j;
     }
 
-    // Save the global mapping JSON.
+    // Saves the global mapping JSON.
     bool saveGlobalMapping(const json &j) {
         std::ofstream ofs(GLOBAL_MAPPING_FILE);
         ofs << j.dump(4);
@@ -34,7 +34,7 @@ namespace {
     /**
      * loadUserFileMapping:
      * Loads and decrypts the per-user mapping file from the user's root directory.
-     * The mapping file name is computed as sha256("<username>_file_mapping.json").
+     * The file name is computed as sha256("<username>_file_mapping.json").
      */
     json loadUserFileMapping(const std::string &userRootPath, const std::string &username, const std::string &privateKey) {
         std::string mappingFileName = SecOps::SecurityOps::sha256(username + "_file_mapping.json");
@@ -53,8 +53,8 @@ namespace {
 
     /**
      * saveUserFileMapping:
-     * Encrypts and saves the per-user mapping file to the user's root directory.
-     * The file name is the hash of "<username>_file_mapping.json".
+     * Encrypts and saves the per-user mapping file in the user's root directory.
+     * The file name is sha256("<username>_file_mapping.json").
      */
     bool saveUserFileMapping(const std::string &userRootPath, const std::string &username, const json &j, const std::string &publicKey) {
         std::string mappingFileName = SecOps::SecurityOps::sha256(username + "_file_mapping.json");
@@ -62,6 +62,16 @@ namespace {
         std::string plain = j.dump(4);
         std::string encrypted = SecOps::SecurityOps::rsaEncrypt(plain, publicKey);
         return Ops::FileOps::writeFile(mappingPath, encrypted);
+    }
+
+    // Helper: returns true if vpath is inside the personal directory.
+    bool isInPersonalDirectory(const std::string &vpath) {
+        return (vpath == "/personal" || vpath.find("/personal/") == 0);
+    }
+
+    // Helper: returns true if vpath is inside the shared directory.
+    bool isInSharedDirectory(const std::string &vpath) {
+        return (vpath == "/shared" || vpath.find("/shared/") == 0);
     }
 }
 
@@ -71,10 +81,37 @@ static const std::string FILESYSTEM_DIR = "filesystem";
 
 /**
  * resolvePath:
- * Converts a virtual path (with plaintext names) to the actual on-disk path (using hashed names).
- * For shared paths (starting with "/shared"), it uses the global mapping; otherwise, it uses the user's root.
+ * Converts a virtual (plaintext) path to the on-disk path (using hashed names).
+ * Special cases:
+ *  - For shared paths (starting with "/shared"), it uses the global mapping.
+ *  - For admin in the root ("/"), cd <username> is allowed to access a user's root.
  */
 std::string InteractiveShell::resolvePath(const std::string &vpath) {
+    // If admin is at "/" and cd to a username.
+    if (currentUser == "admin" && currentDir == "/" && vpath != "/") {
+        json adminMapping;
+        std::string adminMappingFile = SecOps::SecurityOps::sha256("admin_mapping.json");
+        std::string adminMappingPath = FILESYSTEM_DIR + "/" + adminMappingFile;
+        if (std::filesystem::exists(adminMappingPath)) {
+            std::string adminPriv = UOps::UserOps::getUser("admin").privateKey;
+            std::string key = adminPriv.substr(0, 32);
+            try {
+                std::string decrypted = SecOps::SecurityOps::aesDecrypt(Ops::FileOps::readFile(adminMappingPath), key);
+                adminMapping = json::parse(decrypted);
+            } catch (...) {
+                adminMapping = json::object();
+            }
+        }
+        if (adminMapping.contains(vpath)) {
+            // Get user's root folder hash from global mapping.
+            json global = loadGlobalMapping();
+            if (global.contains(vpath))
+                return FILESYSTEM_DIR + "/" + SecOps::SecurityOps::sha256(vpath);
+        }
+        return "";
+    }
+
+    // For shared paths.
     if (vpath.find("/shared") == 0) {
         json global = loadGlobalMapping();
         std::string sharedHash = global[currentUser]["shared"];
@@ -82,7 +119,7 @@ std::string InteractiveShell::resolvePath(const std::string &vpath) {
         std::istringstream iss(vpath);
         std::string token;
         std::string path = base;
-        std::getline(iss, token, '/'); // Skip the "shared" token.
+        std::getline(iss, token, '/'); // Skip "shared"
         while (std::getline(iss, token, '/')) {
             if (token.empty() || token == ".") continue;
             if (token == "..") {
@@ -95,6 +132,7 @@ std::string InteractiveShell::resolvePath(const std::string &vpath) {
         }
         return path;
     } else {
+        // Personal paths.
         std::string base = FILESYSTEM_DIR + "/" + SecOps::SecurityOps::sha256(currentUser);
         std::istringstream iss(vpath);
         std::string token;
@@ -115,7 +153,7 @@ std::string InteractiveShell::resolvePath(const std::string &vpath) {
 
 /**
  * normalizePath:
- * Processes a given path to handle '.' and '..' correctly.
+ * Normalizes a path string, resolving "." and ".." components.
  */
 std::string InteractiveShell::normalizePath(const std::string &path) {
     std::vector<std::string> parts;
@@ -141,8 +179,8 @@ std::string InteractiveShell::normalizePath(const std::string &path) {
 
 /**
  * Constructor:
- * Ensures the user's hashed base folder exists, along with the personal and shared subfolders.
- * Also creates the per-user mapping file if not already present.
+ * Ensures that the user's base folder (hashed) and subfolders ("personal" and "shared") exist.
+ * If the per-user mapping file does not exist, it is created.
  */
 InteractiveShell::InteractiveShell(const std::string &username)
     : currentUser(username), currentDir("/") {
@@ -154,9 +192,10 @@ InteractiveShell::InteractiveShell(const std::string &username)
         Ops::FileOps::makeDirectory(userDir);
         Ops::FileOps::makeDirectory(personalDir);
         Ops::FileOps::makeDirectory(sharedDir);
-        // Create per-user mapping file.
+        // Create per-user mapping file for personal folder.
         json personalMapping;
         personalMapping["username"] = currentUser;
+        // Files will be stored as { hash: [originalName, type] }.
         personalMapping["files"] = json::object();
         std::string pubFilePath = "public_keys/" + currentUser + "_public.pem";
         std::ifstream pubFile(pubFilePath);
@@ -167,24 +206,101 @@ InteractiveShell::InteractiveShell(const std::string &username)
     }
 }
 
+/**
+ * handle_cd:
+ * Changes the current virtual directory.
+ * Restrictions:
+ *  - cd, ls, pwd, and exit are allowed everywhere.
+ *  - Non-admin users cannot cd to "/" (the filesystem root).
+ *  - Admin (when at "/") can cd to a user's root by specifying the username (verified via admin_mapping.json).
+ */
 void InteractiveShell::handle_cd(const std::string &arg) {
     if (arg.empty())
         return;
+    std::string target = arg;
+    if (target == "/") {
+        if (currentUser != "admin") {
+            std::cout << "Access denied: Only admin can access the filesystem root (/).\n";
+            return;
+        }
+        currentDir = "/";
+        return;
+    }
+    if (currentUser == "admin" && currentDir == "/" && target != "/") {
+        json adminMapping;
+        std::string adminMappingFile = SecOps::SecurityOps::sha256("admin_mapping.json");
+        std::string adminMappingPath = FILESYSTEM_DIR + "/" + adminMappingFile;
+        if (std::filesystem::exists(adminMappingPath)) {
+            std::string adminPriv = UOps::UserOps::getUser("admin").privateKey;
+            std::string key = adminPriv.substr(0, 32);
+            try {
+                std::string decrypted = SecOps::SecurityOps::aesDecrypt(Ops::FileOps::readFile(adminMappingPath), key);
+                adminMapping = json::parse(decrypted);
+            } catch (...) {
+                adminMapping = json::object();
+            }
+        }
+        if (adminMapping.contains(target)) {
+            currentDir = "/" + target;
+            return;
+        } else {
+            std::cout << "User " << target << " not found in admin mapping.\n";
+            return;
+        }
+    }
     std::string newPath;
-    if (arg[0] == '/')
-        newPath = normalizePath(arg);
+    if (target[0] == '/')
+        newPath = normalizePath(target);
     else
-        newPath = normalizePath(currentDir + "/" + arg);
+        newPath = normalizePath(currentDir + "/" + target);
+    if (newPath == "/" && currentUser != "admin") {
+        std::cout << "Access denied: Only admin can access the filesystem root (/).\n";
+        return;
+    }
     std::string realPath = resolvePath(newPath);
     if (Ops::FileOps::directoryExists(realPath))
         currentDir = newPath;
+    else
+        std::cout << "Directory does not exist.\n";
 }
 
+/**
+ * handle_pwd:
+ * Prints the current virtual directory.
+ */
 void InteractiveShell::handle_pwd() {
     std::cout << currentDir << "\n";
 }
 
+/**
+ * handle_ls:
+ * Lists the contents of the current directory.
+ * Restrictions:
+ *  - If admin is in "/" (filesystem root), ls lists all usernames from admin_mapping.json.
+ *  - Otherwise, in personal directories, it uses the per-user mapping file.
+ *  - In shared directories, it uses the global mapping.
+ */
 void InteractiveShell::handle_ls() {
+    if (currentUser == "admin" && currentDir == "/") {
+        json adminMapping;
+        std::string adminMappingFile = SecOps::SecurityOps::sha256("admin_mapping.json");
+        std::string adminMappingPath = FILESYSTEM_DIR + "/" + adminMappingFile;
+        if (std::filesystem::exists(adminMappingPath)) {
+            std::string adminPriv = UOps::UserOps::getUser("admin").privateKey;
+            std::string key = adminPriv.substr(0, 32);
+            try {
+                std::string decrypted = SecOps::SecurityOps::aesDecrypt(Ops::FileOps::readFile(adminMappingPath), key);
+                adminMapping = json::parse(decrypted);
+            } catch (...) {
+                adminMapping = json::object();
+            }
+        }
+        std::cout << "Users:\n";
+        for (auto it = adminMapping.begin(); it != adminMapping.end(); ++it) {
+            std::cout << " - " << it.key() << "\n";
+        }
+        return;
+    }
     std::string realDir = resolvePath(currentDir);
     if (!Ops::FileOps::directoryExists(realDir)) {
         std::cout << "Directory does not exist.\n";
@@ -196,30 +312,41 @@ void InteractiveShell::handle_ls() {
         std::string hashedName = entry.path().filename().string();
         std::string displayName = hashedName;
         if (currentDir.find("/shared") == 0) {
-            // For shared folder, look up in the global mapping.
             json global = loadGlobalMapping();
             if (global.contains(currentUser) && global[currentUser].contains("shared_files")) {
                 if (global[currentUser]["shared_files"].contains(hashedName))
                     displayName = global[currentUser]["shared_files"][hashedName];
             }
         } else {
-            // For personal folder, load the decrypted per-user mapping.
             std::string userRoot = FILESYSTEM_DIR + "/" + SecOps::SecurityOps::sha256(currentUser);
             std::string privateKey = UOps::UserOps::getUser(currentUser).privateKey;
             json personal = loadUserFileMapping(userRoot, currentUser, privateKey);
-            if (personal.contains("files") && personal["files"].contains(hashedName))
-                displayName = personal["files"][hashedName];
+            if (personal.contains("files") && personal["files"].contains(hashedName)) {
+                // Mapping entry is [originalName, type]
+                displayName = personal["files"][hashedName][0];
+                std::string type = personal["files"][hashedName][1];
+                if (type == "d")
+                    displayName = "d -> " + displayName;
+                else if (type == "f")
+                    displayName = "f -> " + displayName;
+            }
         }
-        if (entry.is_directory())
-            std::cout << "d -> " << displayName << "\n";
-        else
-            std::cout << "f -> " << displayName << "\n";
+        std::cout << displayName << "\n";
     }
 }
 
+/**
+ * handle_cat:
+ * Displays the decrypted contents of a file.
+ * Allowed only in personal and shared directories.
+ */
 void InteractiveShell::handle_cat(const std::string &filename) {
     if (filename.empty())
         return;
+    if (!(isInPersonalDirectory(currentDir) || isInSharedDirectory(currentDir))) {
+        std::cout << "Access denied: cat is allowed only in personal or shared directories.\n";
+        return;
+    }
     std::string realFile = resolvePath(filename);
     if (!Ops::FileOps::fileExists(realFile)) {
         std::cout << filename << " doesn't exist\n";
@@ -236,6 +363,17 @@ void InteractiveShell::handle_cat(const std::string &filename) {
     }
 }
 
+/**
+ * handle_share:
+ * Shares a file from the personal directory with a target user.
+ * Process:
+ *  - Verifies that the file exists and that the current directory is in personal.
+ *  - Checks for target user existence in the global mapping.
+ *  - Locates the target user's shared folder (using target's hash).
+ *  - Copies the file content to the target user's shared folder.
+ *  - Updates the target user's "shared_files" entry in the global mapping.
+ *  - Note: The shared file is read-only for the recipient.
+ */
 void InteractiveShell::handle_share(const std::string &args) {
     std::istringstream iss(args);
     std::string filename, targetUser;
@@ -244,72 +382,84 @@ void InteractiveShell::handle_share(const std::string &args) {
         std::cout << "Usage: share <filename> <targetUser>\n";
         return;
     }
+    // Restrict share: only allowed in personal directory.
+    if (!isInPersonalDirectory(currentDir)) {
+        std::cout << "Share command allowed only in personal directory and its subdirectories.\n";
+        return;
+    }
     std::string sourceFile = resolvePath(filename);
     if (!Ops::FileOps::fileExists(sourceFile)) {
         std::cout << "File " << filename << " doesn't exist\n";
         return;
     }
-    if (!UOps::UserOps::users.count(targetUser)) {
-        std::cout << "User " << targetUser << " doesn't exist\n";
+    json global = loadGlobalMapping();
+    if (!global.contains(targetUser)) {
+        std::cout << "User " << targetUser << " doesn't exist in global mapping.\n";
         return;
     }
-    // Update global mapping for shared files.
-    json global = loadGlobalMapping();
-    if (!global.contains(targetUser))
-        global[targetUser] = json::object();
-    if (!global[targetUser].contains("shared_files"))
-        global[targetUser]["shared_files"] = json::object();
+    // Locate target user's shared folder.
+    std::string targetSharedHash = global[targetUser]["shared"];
+    std::string targetDir = FILESYSTEM_DIR + "/" + SecOps::SecurityOps::sha256(targetUser) + "/" + targetSharedHash;
+    Ops::FileOps::makeDirectory(targetDir);
+    // Read target user's public key.
+    std::string pubFilePath = "public_keys/" + targetUser + "_public.pem";
+    std::ifstream pubFile(pubFilePath);
+    std::stringstream pubSS;
+    pubSS << pubFile.rdbuf();
+    std::string targetUserPub = pubSS.str();
+    // For simplicity, we copy the file as is (shared files are read-only).
+    std::string fileData = Ops::FileOps::readFile(sourceFile);
     std::string hashName = SecOps::SecurityOps::sha256(filename);
+    // Update global mapping for target user's shared_files.
     global[targetUser]["shared_files"][hashName] = filename;
     saveGlobalMapping(global);
-    // Determine target directory.
-    std::string targetDir = FILESYSTEM_DIR + "/" + SecOps::SecurityOps::sha256(targetUser) + "/" +
-                            SecOps::SecurityOps::sha256("shared");
-    Ops::FileOps::makeDirectory(targetDir);
     std::string targetFile = targetDir + "/" + hashName;
-    std::string data = Ops::FileOps::readFile(sourceFile);
-    Ops::FileOps::writeFile(targetFile, data);
+    Ops::FileOps::writeFile(targetFile, fileData);
     std::cout << "Shared file with " << targetUser << " at /shared/" << filename << "\n";
 }
 
+/**
+ * handle_mkdir:
+ * Creates a new directory.
+ * Restrictions:
+ *  - Allowed only in personal directory and its subdirectories.
+ *  - Updates the per-user mapping file with an entry: {hash: [originalName, "d"]}.
+ */
 void InteractiveShell::handle_mkdir(const std::string &dirname) {
     if (dirname.empty()) {
         std::cout << "Usage: mkdir <directory_name>\n";
         return;
     }
-    std::string hashName = SecOps::SecurityOps::sha256(dirname);
-    if (currentDir.find("/shared") == 0) {
-        json global = loadGlobalMapping();
-        if (!global.contains(currentUser))
-            global[currentUser] = json::object();
-        if (!global[currentUser].contains("shared_files"))
-            global[currentUser]["shared_files"] = json::object();
-        if (global[currentUser]["shared_files"].contains(hashName)) {
-            std::cout << "Directory already exists\n";
-            return;
-        }
-        global[currentUser]["shared_files"][hashName] = dirname;
-        saveGlobalMapping(global);
-    } else {
-        std::string userRoot = FILESYSTEM_DIR + "/" + SecOps::SecurityOps::sha256(currentUser);
-        json personal = loadUserFileMapping(userRoot, currentUser, UOps::UserOps::getUser(currentUser).privateKey);
-        if (personal.contains("files") && personal["files"].contains(hashName)) {
-            std::cout << "Directory already exists\n";
-            return;
-        }
-        personal["files"][hashName] = dirname;
-        std::string pubFilePath = "public_keys/" + currentUser + "_public.pem";
-        std::ifstream pubFile(pubFilePath);
-        std::stringstream pubSS;
-        pubSS << pubFile.rdbuf();
-        std::string userPub = pubSS.str();
-        saveUserFileMapping(userRoot, currentUser, personal, userPub);
+    if (!isInPersonalDirectory(currentDir)) {
+        std::cout << "mkdir allowed only in personal directory and its subdirectories.\n";
+        return;
     }
-    std::string realDir = resolvePath(hashName);
+    std::string hashName = SecOps::SecurityOps::sha256(dirname);
+    std::string userRoot = FILESYSTEM_DIR + "/" + SecOps::SecurityOps::sha256(currentUser);
+    json personal = loadUserFileMapping(userRoot, currentUser, UOps::UserOps::getUser(currentUser).privateKey);
+    if (personal.contains("files") && personal["files"].contains(hashName)) {
+        std::cout << "Directory already exists\n";
+        return;
+    }
+    personal["files"][hashName] = json::array({ dirname, "d" });
+    std::string pubFilePath = "public_keys/" + currentUser + "_public.pem";
+    std::ifstream pubFile(pubFilePath);
+    std::stringstream pubSS;
+    pubSS << pubFile.rdbuf();
+    std::string userPub = pubSS.str();
+    saveUserFileMapping(userRoot, currentUser, personal, userPub);
+    std::string realDir = resolvePath(dirname);
     if (!Ops::FileOps::makeDirectory(realDir))
         std::cout << "Failed to create directory\n";
 }
 
+/**
+ * handle_mkfile:
+ * Creates or overwrites a file.
+ * Restrictions:
+ *  - Allowed only in personal directory and its subdirectories.
+ *  - Updates per-user mapping with an entry: {hash: [originalName, "f"]}.
+ */
 void InteractiveShell::handle_mkfile(const std::string &args) {
     std::istringstream iss(args);
     std::string filename;
@@ -322,26 +472,21 @@ void InteractiveShell::handle_mkfile(const std::string &args) {
     std::getline(iss, content);
     if (!content.empty() && content[0]==' ')
         content.erase(content.begin());
-    std::string hashName = SecOps::SecurityOps::sha256(filename);
-    if (currentDir.find("/shared") == 0) {
-        json global = loadGlobalMapping();
-        if (!global.contains(currentUser))
-            global[currentUser] = json::object();
-        if (!global[currentUser].contains("shared_files"))
-            global[currentUser]["shared_files"] = json::object();
-        global[currentUser]["shared_files"][hashName] = filename;
-        saveGlobalMapping(global);
-    } else {
-        std::string userRoot = FILESYSTEM_DIR + "/" + SecOps::SecurityOps::sha256(currentUser);
-        json personal = loadUserFileMapping(userRoot, currentUser, UOps::UserOps::getUser(currentUser).privateKey);
-        personal["files"][hashName] = filename;
-        std::string pubFilePath = "public_keys/" + currentUser + "_public.pem";
-        std::ifstream pubFile(pubFilePath);
-        std::stringstream pubSS;
-        pubSS << pubFile.rdbuf();
-        std::string userPub = pubSS.str();
-        saveUserFileMapping(userRoot, currentUser, personal, userPub);
+    if (!isInPersonalDirectory(currentDir)) {
+        std::cout << "mkfile allowed only in personal directory and its subdirectories.\n";
+        return;
     }
+    std::string hashName = SecOps::SecurityOps::sha256(filename);
+    std::string userRoot = FILESYSTEM_DIR + "/" + SecOps::SecurityOps::sha256(currentUser);
+    json personal = loadUserFileMapping(userRoot, currentUser, UOps::UserOps::getUser(currentUser).privateKey);
+    personal["files"][hashName] = json::array({ filename, "f" });
+    std::string pubFilePath = "public_keys/" + currentUser + "_public.pem";
+    std::ifstream pubFile(pubFilePath);
+    std::stringstream pubSS;
+    pubSS << pubFile.rdbuf();
+    std::string userPub = pubSS.str();
+    saveUserFileMapping(userRoot, currentUser, personal, userPub);
+    // Encrypt file content using AES with key derived from user's private key.
     std::string userKey = UOps::UserOps::getUser(currentUser).privateKey;
     std::string aesKey = userKey.substr(0, 32);
     std::string encContent;
@@ -351,10 +496,18 @@ void InteractiveShell::handle_mkfile(const std::string &args) {
         std::cout << "Error encrypting file: " << e.what() << "\n";
         return;
     }
-    std::string realFile = resolvePath(hashName);
+    std::string realFile = resolvePath(filename);
     Ops::FileOps::writeFile(realFile, encContent);
 }
 
+/**
+ * handle_adduser:
+ * Allows admin to add a new user.
+ * Restrictions:
+ *  - Only admin can run this command.
+ *  - Before creating a user, user existence is checked.
+ *  - After creation, admin_mapping.json is updated with the new user's info.
+ */
 void InteractiveShell::handle_adduser(const std::string &username) {
     if (currentUser != "admin") {
         std::cout << "Forbidden: Only admin can add users\n";
@@ -364,23 +517,43 @@ void InteractiveShell::handle_adduser(const std::string &username) {
         std::cout << "Usage: adduser <username>\n";
         return;
     }
-    UOps::UserOps::createUser(username);
+    if (UOps::UserOps::userExists(username)) {
+        std::cout << "User " << username << " already exists.\n";
+        return;
+    }
+    if (!UOps::UserOps::createUser(username)) {
+        std::cout << "Failed to create user " << username << "\n";
+        return;
+    }
+    // Update admin_mapping.json with new user's private key.
+    std::string adminPriv = UOps::UserOps::getUser("admin").privateKey;
+    if (!UOps::UserOps::updateAdminMapping(username, UOps::UserOps::getUser(username).privateKey, adminPriv)) {
+        std::cout << "Failed to update admin mapping.\n";
+    }
 }
 
+/**
+ * showHelp:
+ * Displays the list of available commands.
+ */
 void InteractiveShell::showHelp() {
     std::cout << "Commands:\n"
-              << "  cd <directory>         - Change directory (supports ., .., multiple levels)\n"
+              << "  cd <directory>         - Change directory (cd allowed everywhere, but / is restricted to admin)\n"
               << "  pwd                    - Print current working directory\n"
               << "  ls                     - List files and directories\n"
-              << "  cat <filename>         - Display decrypted contents of a file\n"
-              << "  share <file> <user>    - Share file with target user\n"
-              << "  mkdir <dirname>        - Create a new directory\n"
-              << "  mkfile <file> <text>   - Create or overwrite a file with contents\n"
+              << "  cat <filename>         - Display decrypted file contents (allowed only in personal/shared)\n"
+              << "  share <file> <user>    - Share a file (allowed only in personal directory)\n"
+              << "  mkdir <dirname>        - Create a new directory (allowed only in personal directory)\n"
+              << "  mkfile <file> <text>   - Create/overwrite a file (allowed only in personal directory)\n"
               << "  exit                   - Terminate the program\n";
     if (currentUser == "admin")
         std::cout << "  adduser <username>     - Create a new user (admin only)\n";
 }
 
+/**
+ * start:
+ * The main interactive loop that reads user commands and dispatches them to the handlers.
+ */
 void InteractiveShell::start() {
     std::string line;
     while (true) {
