@@ -392,6 +392,9 @@ void InteractiveShell::handle_ls() {
             }
             return;
         }
+        else {
+            std::cout << "Entries found\n";
+        }
         for (auto &item : filemap["entries"].items()) {
             if (item.value().contains("name") && item.value().contains("type")) {
                 std::string name = item.value()["name"];
