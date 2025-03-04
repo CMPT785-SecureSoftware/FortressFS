@@ -210,6 +210,9 @@ std::string SecurityOps::aesEncrypt(const std::string &plaintext, const std::str
         EVP_CIPHER_CTX_free(ctx);
         throw std::runtime_error("EVP_EncryptInit_ex failed: " + getOpenSSLError());
     }
+    // Explicitly enable PKCS#7 padding.
+    EVP_CIPHER_CTX_set_padding(ctx, 1);
+    
     std::vector<unsigned char> ciphertext(plaintext.size() + EVP_CIPHER_block_size(EVP_aes_256_cbc()));
     int outLen1 = 0;
     if (EVP_EncryptUpdate(ctx, ciphertext.data(), &outLen1,
@@ -252,6 +255,9 @@ std::string SecurityOps::aesDecrypt(const std::string &ciphertext, const std::st
         EVP_CIPHER_CTX_free(ctx);
         throw std::runtime_error("EVP_DecryptInit_ex failed: " + getOpenSSLError());
     }
+    // Explicitly enable padding.
+    EVP_CIPHER_CTX_set_padding(ctx, 1);
+    
     std::vector<unsigned char> plaintext(encData.size() + EVP_CIPHER_block_size(EVP_aes_256_cbc()));
     int outLen1 = 0;
     if (EVP_DecryptUpdate(ctx, plaintext.data(), &outLen1,
@@ -277,6 +283,55 @@ std::string SecurityOps::sha256(const std::string &data) {
     for (int i = 0; i < SHA256_DIGEST_LENGTH; ++i)
         ss << std::hex << std::setw(2) << std::setfill('0') << (int)hash[i];
     return ss.str();
+}
+
+/**
+ * hybridEncrypt:
+ * Implements hybrid encryption:
+ * 1. Generate a random 32-byte AES key.
+ * 2. Encrypt the plaintext using AES-256-CBC.
+ * 3. Encrypt the AES key using RSA with the provided public key.
+ * 4. Return the concatenation: [RSA-encrypted AES key (256 bytes)] || [AES ciphertext].
+ */
+std::string SecurityOps::hybridEncrypt(const std::string &plaintext, const std::string &publicKeyPem) {
+    // Generate random 32-byte AES key.
+    unsigned char aesKey[32];
+    if (!RAND_bytes(aesKey, sizeof(aesKey)))
+        throw std::runtime_error("Failed to generate AES key: " + getOpenSSLError());
+    std::string aesKeyStr(reinterpret_cast<char*>(aesKey), 32);
+
+    // Encrypt the plaintext using AES.
+    std::string aesCiphertext = aesEncrypt(plaintext, aesKeyStr);
+
+    // Encrypt the AES key using RSA with the public key.
+    std::string encAesKey = rsaEncrypt(aesKeyStr, publicKeyPem);
+    // For a 2048-bit RSA key, encAesKey should be 256 bytes.
+
+    // Concatenate the RSA-encrypted AES key and the AES ciphertext.
+    return encAesKey + aesCiphertext;
+}
+
+/**
+ * hybridDecrypt:
+ * Implements hybrid decryption:
+ * 1. Extracts the first 256 bytes (RSA-encrypted AES key) and decrypts it using RSA (with the private key).
+ * 2. Uses the recovered AES key to decrypt the remaining ciphertext (which includes the IV).
+ */
+std::string SecurityOps::hybridDecrypt(const std::string &ciphertext, const std::string &privateKeyPem) {
+    // For a 2048-bit RSA key, the RSA-encrypted AES key is 256 bytes.
+    if (ciphertext.size() < 256)
+        throw std::runtime_error("Ciphertext too short for hybrid decryption.");
+
+    std::string encAesKey = ciphertext.substr(0, 256);
+    std::string aesCiphertext = ciphertext.substr(256);
+
+    // RSA-decrypt the AES key.
+    std::string aesKeyStr = rsaDecrypt(encAesKey, privateKeyPem);
+    if (aesKeyStr.size() != 32)
+        throw std::runtime_error("Recovered AES key size is incorrect.");
+
+    // Decrypt the AES ciphertext.
+    return aesDecrypt(aesCiphertext, aesKeyStr);
 }
 
 } // namespace SecOps

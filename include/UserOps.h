@@ -66,7 +66,8 @@ namespace UOps {
         /**
          * createUserFileMapping:
          * Creates a JSON describing the user's file mapping (e.g., root folder, personal folder, etc.),
-         * encrypts it with the user's public key, and writes it to the user's root folder.
+         * encrypts it with a hybrid approach (AES encryption using a random key, which is then RSA-encrypted
+         * using the user's public key), and writes it to the user's root folder.
          * The file is named as sha256("user_file_mapping.json") under filesystem/<sha256(username)>.
          */
         static bool createUserFileMapping(const std::string &username, const std::string &userPub);

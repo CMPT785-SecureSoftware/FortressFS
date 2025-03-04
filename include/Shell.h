@@ -13,7 +13,7 @@ namespace Shell {
     class InteractiveShell {
     public:
         // Constructor: pass the logged-in username.
-        InteractiveShell(const std::string &username);
+        explicit InteractiveShell(const std::string &username);
 
         // Begin the interactive loop
         void start();
