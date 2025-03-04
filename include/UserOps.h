@@ -3,6 +3,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <nlohmann/json.hpp>
 
 /**
  * Namespace UOps encapsulates operations related to user management,
@@ -10,6 +11,16 @@
  */
 namespace UOps {
 
+    // We create a local alias for nlohmann::json so we can say "json"
+    using json = nlohmann::json;
+
+    /**
+     * User structure contains:
+     *  - username
+     *  - privateKey (the actual RSA private key content)
+     *  - publicKey
+     *  - isAdmin (true for admin)
+     */
     struct User {
         std::string username;
         std::string privateKey;
@@ -17,12 +28,20 @@ namespace UOps {
         bool isAdmin;
     };
 
+    /**
+     * UserOps provides:
+     *  - createUser
+     *  - login
+     *  - mapUser / updateAdminMapping
+     *  - getUser / userExists
+     *  and keeps an in-memory cache of User objects.
+     */
     class UserOps {
     public:
         // createUser: generates keys, moves them, updates global mapping, etc.
         static bool createUser(const std::string &username);
 
-        // login: logs in using <username>_keyfile.pem content, decrypts mapping, verifies username.
+        // login: logs in using <username>_keyfile.pem content, decrypts user_file_mapping, verifies username.
         static std::string login(const std::string &keyfilePath);
 
         // getUser: returns the user from in-memory cache.
@@ -43,19 +62,18 @@ namespace UOps {
     private:
         /**
          * createUserFileMapping:
-         * Creates a JSON describing the user_file_mapping (root hash, personal hash, subfolders, etc.),
-         * encrypts it with the user's publicKey, and writes it to the user's root folder. 
-         * This ensures that a user_file_mapping.json is present in an encrypted form.
+         * Creates a JSON describing the user_file_mapping (root hash, personal hash, etc.).
+         * Encrypts it with the user's publicKey, writes to the user's root folder.
          */
         static bool createUserFileMapping(const std::string &username, const std::string &userPub);
 
         /**
          * loadUserFileMapping:
-         * Reads the encrypted user_file_mapping from the user's root, 
-         * decrypts with userPriv, and returns the parsed JSON. 
-         * If anything fails, returns an empty object.
+         * Reads the encrypted user_file_mapping from the user's root,
+         * decrypts with userPriv, and returns the parsed JSON.
+         * If anything fails, returns an empty JSON object.
          */
-        static nlohmann::json loadUserFileMapping(const std::string &username, const std::string &userPriv);
+        static json loadUserFileMapping(const std::string &username, const std::string &userPriv);
     };
 }
 
