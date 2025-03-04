@@ -681,7 +681,7 @@ void InteractiveShell::showHelp() {
         } else if (!viewedUser.empty()) {
             std::cout << "Commands in user(" << viewedUser << ") view (read-only):\n"
                       << "  cd <dir>               - Navigate within the user's personal/shared folders\n"
-                      << "  ls                     - List files with original names (from user_file_mapping)\n"
+                      << "  ls                     - List files with original names\n"
                       << "  cat <file>             - Display file contents\n"
                       << "  pwd                    - Show '/" << viewedUser << "'\n"
                       << "  cd ..                  - Return to filesystem view\n"
@@ -712,7 +712,7 @@ void InteractiveShell::showHelp() {
                       << "  help                   - Show help\n";
         } else if (isInPersonalDirectory(currentDir)) {
             std::cout << "Commands in personal:\n"
-                      << "  ls                     - List files/folders (original names from user_file_mapping)\n"
+                      << "  ls                     - List files/folders\n"
                       << "  cat <file>             - Display file contents\n"
                       << "  mkfile <file> <text>   - Create file\n"
                       << "  mkdir <dir>            - Create directory\n"

@@ -188,16 +188,10 @@ bool UserOps::createUser(const std::string &username) {
     bool adminFlag = (username == "admin");
     if (adminFlag) {
         if (!UOps::UserOps::updateAdminMapping(username, userPriv, userPub)) {
-            std::cout << "Failed to update admin mapping.\n";
+            Ops::FileOps::appendErrorLog("[Debug] Failed to update admin mapping for " + username);
         }
     }
     users[username] = User{username, userPriv, userPub, adminFlag};
-    if (username == "admin"){
-        std::cout << "Updating user mapping for admin...\n";
-        if (!UOps::UserOps::updateAdminMapping(username, userPriv, userPub)) {
-            std::cout << "Failed to update admin mapping.\n";
-        }
-    }
     return true;
 }
 
@@ -351,8 +345,6 @@ bool UserOps::updateAdminMapping(const std::string &username, const std::string 
     if (!success) {
         Ops::FileOps::appendErrorLog("[Debug] updateAdminMapping: writeFile failed for " + adminMappingPath);
     }
-    if (username=="admin")
-        std::cout << "Admin mapping updated.\n";
     return success;
 }
 
