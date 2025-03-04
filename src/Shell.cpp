@@ -532,7 +532,7 @@ void InteractiveShell::handle_mkfile(const std::string &args) {
         std::cout << "mkfile allowed only in personal directory and its subdirectories.\n";
         return;
     }
-    if (currentUser == "admin" && (!isAdminFSMode || !viewedUser.empty())) {
+    if (currentUser == "admin" && (isAdminFSMode || !viewedUser.empty())) {
         std::cout << "Admin is read-only in user directories. mkfile not allowed.\n";
         return;
     }
