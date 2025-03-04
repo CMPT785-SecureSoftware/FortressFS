@@ -345,7 +345,7 @@ bool UserOps::updateAdminMapping(const std::string &username, const std::string 
     if (!success) {
         Ops::FileOps::appendErrorLog("[Debug] updateAdminMapping: writeFile failed for " + adminMappingPath);
     }
-    if (username="admin")
+    if (username=="admin")
         std::cout << "Admin mapping updated.\n";
     return success;
 }
