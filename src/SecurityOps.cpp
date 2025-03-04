@@ -210,6 +210,9 @@ std::string SecurityOps::aesEncrypt(const std::string &plaintext, const std::str
         EVP_CIPHER_CTX_free(ctx);
         throw std::runtime_error("EVP_EncryptInit_ex failed: " + getOpenSSLError());
     }
+    // Explicitly enable PKCS#7 padding.
+    EVP_CIPHER_CTX_set_padding(ctx, 1);
+    
     std::vector<unsigned char> ciphertext(plaintext.size() + EVP_CIPHER_block_size(EVP_aes_256_cbc()));
     int outLen1 = 0;
     if (EVP_EncryptUpdate(ctx, ciphertext.data(), &outLen1,
@@ -252,6 +255,9 @@ std::string SecurityOps::aesDecrypt(const std::string &ciphertext, const std::st
         EVP_CIPHER_CTX_free(ctx);
         throw std::runtime_error("EVP_DecryptInit_ex failed: " + getOpenSSLError());
     }
+    // Explicitly enable padding.
+    EVP_CIPHER_CTX_set_padding(ctx, 1);
+    
     std::vector<unsigned char> plaintext(encData.size() + EVP_CIPHER_block_size(EVP_aes_256_cbc()));
     int outLen1 = 0;
     if (EVP_DecryptUpdate(ctx, plaintext.data(), &outLen1,
@@ -308,9 +314,8 @@ std::string SecurityOps::hybridEncrypt(const std::string &plaintext, const std::
 /**
  * hybridDecrypt:
  * Implements hybrid decryption:
- * 1. Extract the first 256 bytes as the RSA-encrypted AES key.
- * 2. RSA-decrypt to recover the AES key using the provided private key.
- * 3. Decrypt the remaining ciphertext with AES-256-CBC.
+ * 1. Extracts the first 256 bytes (RSA-encrypted AES key) and decrypts it using RSA (with the private key).
+ * 2. Uses the recovered AES key to decrypt the remaining ciphertext (which includes the IV).
  */
 std::string SecurityOps::hybridDecrypt(const std::string &ciphertext, const std::string &privateKeyPem) {
     // For a 2048-bit RSA key, the RSA-encrypted AES key is 256 bytes.
