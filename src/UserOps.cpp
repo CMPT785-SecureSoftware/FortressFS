@@ -35,7 +35,7 @@ namespace UOps {
             std::cout << "Failed to generate key pair for " << username << "\n";
             return false;
         }
-        std::ifstream privFile(username + "_private.pem");
+        std::ifstream privFile(username + "_keyfile.pem");
         std::stringstream privBuf;
         privBuf << privFile.rdbuf();
         std::string userPriv = privBuf.str();
