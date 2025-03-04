@@ -24,8 +24,8 @@ Log in with your keyfile. For example:
 ### For admin:
 ```bash
 ./fortressfs .<location>/admin_keyfile.pem
-For a regular user:
 ```
+For a regular user:
 ```bash
 ./fortressfs .<location>/<username>_keyfile.pem
 ```
