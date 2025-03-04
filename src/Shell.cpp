@@ -98,13 +98,20 @@ InteractiveShell::InteractiveShell(const std::string &username)
 /**
  * resolvePath:
  * Converts a virtual path (e.g., "/shared/docs" or "/personal") to the corresponding hashed on-disk path.
- * For shared, it consults global_mapping.json; for personal, it uses the hashed user root.
+ * For "shared", it consults global_mapping.json to get the shared folder hash for the active user.
+ * If the global mapping does not contain a "shared" value, it falls back to using sha256("shared").
+ * For "personal", it uses the hashed user root.
  */
 std::string InteractiveShell::resolvePath(const std::string &vpath) {
     std::string activeUser = (currentUser == "admin" && !viewedUser.empty()) ? viewedUser : currentUser;
     if (vpath.rfind("/shared", 0) == 0) {
         json global = loadGlobalMapping();
-        std::string sharedHash = global[activeUser]["shared"];
+        std::string sharedHash;
+        if (global.contains(activeUser) && global[activeUser].contains("shared"))
+            sharedHash = global[activeUser]["shared"];
+        else
+            sharedHash = SecOps::SecurityOps::sha256("shared"); // fallback default
+
         std::string base = FILESYSTEM_DIR + "/" + SecOps::SecurityOps::sha256(activeUser) + "/" + sharedHash;
         std::istringstream iss(vpath);
         std::string token;
@@ -166,18 +173,18 @@ std::string InteractiveShell::normalizePath(const std::string &path) {
 /**
  * handle_cd:
  * Implements the cd command:
- * - For normal users, it navigates within personal/shared directories.
+ * - For normal users, navigates within personal/shared directories.
  * - For admin:
- *   * At admin's own root ("/"), "cd shared" or "cd personal" is allowed (ensuring the folder exists).
+ *   * At admin's own root ("/"), "cd shared" or "cd personal" is allowed (creating the folder if it doesn’t exist).
  *   * "cd .." at admin's root switches to filesystem view.
  *   * In filesystem view, "cd <username>" lets admin view that user's directory.
- *   * When admin is viewing a user, "cd .." from "/" returns to filesystem view.
+ *   * When admin is viewing a user, "cd .." at "/" returns to filesystem view.
  */
 void InteractiveShell::handle_cd(const std::string &arg) {
     if (arg.empty()) return;
     std::string target = arg;
 
-    // Admin at own root "/" (not in filesystem view) can type "cd shared" or "cd personal".
+    // Admin at own root (not in filesystem view) can type "cd shared" or "cd personal".
     if (currentUser == "admin" && !isAdminFSMode && viewedUser.empty() && currentDir == "/") {
         if (target == "..") {
             isAdminFSMode = true;
@@ -189,14 +196,27 @@ void InteractiveShell::handle_cd(const std::string &arg) {
             std::string dirHash = SecOps::SecurityOps::sha256(target);
             std::string realPath = FILESYSTEM_DIR + "/" + userHash + "/" + dirHash;
             if (!Ops::FileOps::directoryExists(realPath)) {
-                Ops::FileOps::makeDirectory(realPath);
+                std::cout << "Directory does not exist.\n";
             }
             currentDir = "/" + target;
             return;
         }
     }
 
-    // Admin in filesystem view (isAdminFSMode true)
+    // Normal users at root: if cd to "shared" or "personal", ensure folder exists.
+    if (currentUser != "admin" && currentDir == "/") {
+        if (target == "shared" || target == "personal") {
+            std::string newPath = "/" + target;
+            std::string realPath = resolvePath(newPath);
+            if (!Ops::FileOps::directoryExists(realPath)) {
+                std::cout << "Directory does not exist.\n";
+            }
+            currentDir = newPath;
+            return;
+        }
+    }
+
+    // Admin in filesystem view.
     if (currentUser == "admin" && isAdminFSMode) {
         if (target == "..") {
             std::cout << "Already at filesystem view, can't go higher.\n";
@@ -352,7 +372,6 @@ void InteractiveShell::handle_ls() {
         }
         return;
     }
-
     // In personal directory, load user_file_mapping to list original names.
     if (isInPersonalDirectory(currentDir)) {
         json filemap = UOps::UserOps::loadUserFileMappingPublic(activeUser, UOps::UserOps::getUser(activeUser).privateKey);
@@ -374,7 +393,6 @@ void InteractiveShell::handle_ls() {
         }
         return;
     }
-
     // Fallback: list hashed names.
     for (auto &entry : std::filesystem::directory_iterator(realDir)) {
         std::cout << entry.path().filename().string() << "\n";
@@ -445,8 +463,8 @@ void InteractiveShell::handle_cat(const std::string &filename) {
 }
 
 /**
- * handle_share, handle_mkdir, handle_mkfile, and handle_adduser remain largely unchanged.
- * (They can be updated similarly to update user_file_mapping "entries" if desired.)
+ * handle_share:
+ * Shares a file from the user's personal directory to another user's shared folder.
  */
 void InteractiveShell::handle_share(const std::string &args) {
     std::istringstream iss(args);
@@ -476,13 +494,10 @@ void InteractiveShell::handle_share(const std::string &args) {
     std::string hashedName = SecOps::SecurityOps::sha256(filename);
     global[targetUser]["shared_files"][hashedName] = filename;
     saveGlobalMapping(global);
-
     std::string targetSharedHash = global[targetUser]["shared"];
     std::string targetDir = FILESYSTEM_DIR + "/" + SecOps::SecurityOps::sha256(targetUser) + "/" + targetSharedHash;
-    Ops::FileOps::makeDirectory(targetDir);
     std::string targetFile = targetDir + "/" + hashedName;
     Ops::FileOps::writeFile(targetFile, data);
-
     std::cout << "Shared file with " << targetUser << " at /shared/" << filename << "\n";
 }
 
