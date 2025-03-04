@@ -11,7 +11,7 @@ using json = nlohmann::json;
 
 namespace UOps {
 
-    // In-memory cache of users.
+    // In-memory cache for users.
     std::unordered_map<std::string, User> UserOps::users;
     static const std::string PRIVATE_KEYS_DIR = "private_keys";
     static const std::string PUBLIC_KEYS_DIR = "public_keys";
@@ -19,8 +19,7 @@ namespace UOps {
     /**
      * createUser:
      * - Validates the username.
-     * - Generates RSA key pairs.
-     * - Moves keyfiles to proper directories.
+     * - Generates RSA key pairs and moves keys to proper directories.
      * - Creates the per-user mapping file (named as sha256("<username>_file_mapping.json"))
      *   in the user's root folder (which is hashed).
      * - Updates the global mapping.
@@ -60,12 +59,12 @@ namespace UOps {
         std::cout << "Created user: " << username << "\n";
         std::filesystem::remove(username + "_public.pem");
 
-        // Create per-user mapping file.
+        // Create the per-user mapping file.
         std::string userRootDir = "filesystem/" + SecOps::SecurityOps::sha256(username);
         std::filesystem::create_directories(userRootDir);
         json userMapping;
         userMapping["username"] = username;
-        // Files will be stored as: { <hash>: [original name, "d" or "f"] }.
+        // Files and folders are stored as: { hash: [originalName, type] }
         userMapping["files"] = json::object();
         std::string mappingStr = userMapping.dump(4);
         std::string encryptedMapping = SecOps::SecurityOps::rsaEncrypt(mappingStr, userPub);
@@ -73,7 +72,7 @@ namespace UOps {
         std::string mappingFilePath = userRootDir + "/" + mappingFileName;
         Ops::FileOps::writeFile(mappingFilePath, encryptedMapping);
 
-        // Update global mapping.
+        // Update the global mapping for this user.
         if (!UserOps::mapUser(username, userPub)) {
             std::cout << "Failed to update global mapping for " << username << "\n";
             return false;
@@ -88,18 +87,18 @@ namespace UOps {
         return User{"", "", "", false};
     }
 
-    // userExists returns true if the user is already in the in-memory cache.
+    // userExists returns true if the user is in the in-memory cache.
     bool UserOps::userExists(const std::string &username) {
         return (users.find(username) != users.end());
     }
 
     /**
      * login:
-     * - Reads the provided keyfile to obtain the private key.
+     * - Reads the keyfile to obtain the private key.
      * - Extracts the username from the keyfile's name.
-     * - Scans the user's hashed root directory for the single mapping file.
-     * - Decrypts the mapping file using the provided private key and verifies that it contains the correct username.
-     * - Loads the user's public key from disk and caches the user.
+     * - Scans the user's hashed root directory for the (only) mapping file.
+     * - Decrypts the mapping file with the provided private key and verifies the username.
+     * - Loads the public key from disk and caches the user.
      */
     std::string UserOps::login(const std::string &keyfilePath) {
         std::filesystem::path p(keyfilePath);
@@ -161,7 +160,7 @@ namespace UOps {
             std::cerr << "User mapping does not match for " << uname << "\n";
             return "";
         }
-        // Load user's public key.
+        // Load the public key.
         std::string pubFilePath = PUBLIC_KEYS_DIR + "/" + uname + "_public.pem";
         std::ifstream pubFile(pubFilePath);
         std::stringstream pubBuf;
@@ -174,9 +173,9 @@ namespace UOps {
     /**
      * mapUser:
      * Updates global_mapping.json with the user's base directory information:
-     * - "root": hash(username)
-     * - "shared": hash("shared")
-     * - "shared_files": an empty object to store files shared to the user.
+     * - "root": sha256(username)
+     * - "shared": sha256("shared")
+     * - "shared_files": an empty object.
      */
     bool UserOps::mapUser(const std::string &username, const std::string &publicKey) {
         json mapping;
@@ -197,8 +196,7 @@ namespace UOps {
 
     /**
      * updateAdminMapping:
-     * Updates admin_mapping.json (stored at the filesystem root) with a new user's info.
-     * The admin_mapping file (filename = sha256("admin_mapping.json")) maps usernames to their private keys.
+     * Updates admin_mapping.json (stored at FILESYSTEM_DIR) mapping usernames to their private keys.
      * This file is encrypted using AES with a key derived from admin's private key.
      */
     bool UserOps::updateAdminMapping(const std::string &username, const std::string &userPrivateKey, const std::string &adminPrivateKey) {

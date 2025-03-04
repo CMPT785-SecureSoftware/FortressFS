@@ -7,42 +7,45 @@
 namespace UOps {
 
     /**
-     * The User structure holds the information for a user:
-     * - username, decrypted private key, public key, and an admin flag.
+     * User represents a system user.
+     * - username: Plaintext username.
+     * - privateKey: The decrypted private key loaded from the keyfile.
+     * - publicKey: The corresponding public key loaded from disk.
+     * - isAdmin: Flag indicating whether the user is an administrator.
      */
     struct User {
         std::string username;
-        std::string privateKey;  // Loaded from keyfile (decrypted).
-        std::string publicKey;   // Loaded from the public_keys directory.
+        std::string privateKey;
+        std::string publicKey;
         bool isAdmin;
     };
 
     /**
-     * UserOps provides functions to create users, log in, and manage global mappings.
-     * It also caches the currently logged-in user.
+     * UserOps provides functionality to create and log in users, and to manage
+     * global mappings. It also caches the current user.
      */
     class UserOps {
     public:
         // Creates a new user (used by admin) and sets up the per-user mapping file.
         static bool createUser(const std::string &username);
 
-        // Logs in a user by reading and decrypting the per-user mapping file.
+        // Logs in a user by decrypting the per-user mapping file.
         static std::string login(const std::string &keyfilePath);
 
-        // Returns the User record from the in-memory cache.
+        // Returns the in-memory user record.
         static User getUser(const std::string &username);
 
-        // Checks whether a user exists in the in-memory cache.
+        // Checks if a user is already in the in-memory cache.
         static bool userExists(const std::string &username);
 
-        // Updates the global mapping file (global_mapping.json) with base directory info for the user.
+        // Updates the global mapping file (global_mapping.json) with the user's base directory info.
         static bool mapUser(const std::string &username, const std::string &publicKey);
 
-        // Updates the admin mapping (admin_mapping.json) with a new user's private key.
-        // admin_mapping.json is stored in FILESYSTEM_DIR and encrypted using admin's private key.
+        // Updates the admin mapping (admin_mapping.json) with new user info.
+        // admin_mapping.json is stored in FILESYSTEM_DIR, encrypted using admin's private key.
         static bool updateAdminMapping(const std::string &username, const std::string &userPrivateKey, const std::string &adminPrivateKey);
 
-        // In-memory cache for the user (only one user per session).
+        // In-memory cache of the user (only one user exists per session).
         static std::unordered_map<std::string, User> users;
     };
 }
