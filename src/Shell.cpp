@@ -109,7 +109,7 @@ std::string InteractiveShell::resolvePath(const std::string &vpath) {
         std::string sharedHash;
         if (global.contains(activeUser) && global[activeUser].contains("shared")){
             sharedHash = global[activeUser]["shared"];
-            std::cout << "Shared hash: " << sharedHash << "\n";
+            //std::cout << "Shared hash: " << sharedHash << "\n";
         }
         else
             sharedHash = SecOps::SecurityOps::sha256("shared"); // fallback default
@@ -355,9 +355,9 @@ void InteractiveShell::handle_ls() {
         std::cout << "shared\n";
         return;
     }
-    std::cout << "Listing directory: " << currentDir << "\n";
+    //std::cout << "Listing directory: " << currentDir << "\n";
     std::string realDir = resolvePath(currentDir);
-    std::cout << "Real directory: " << realDir << "\n";
+    //std::cout << "Real directory: " << realDir << "\n";
     if (!Ops::FileOps::directoryExists(realDir)) {
         std::cout << "Hi there\n";
         std::cout << "Directory does not exist.\n";
