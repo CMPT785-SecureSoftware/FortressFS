@@ -4,6 +4,8 @@
 #include <string>
 #include <unordered_map>
 
+#define USER_OPS_VERSION "1.0.0"
+
 // Minimal user manager that stores usernames -> public/private keys
 namespace UOps
 {
@@ -16,6 +18,11 @@ namespace UOps
 
     class UserOps {
     public:
+        // Get version of the UserOps system
+        static std::string getVersion() {
+            return USER_OPS_VERSION;
+        }
+
         // Create new user, generate RSA pair
         static bool createUser(const std::string& username, bool admin=false);
 
