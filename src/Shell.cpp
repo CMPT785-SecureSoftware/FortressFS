@@ -445,11 +445,37 @@ void InteractiveShell::handle_share(const std::string &args) {
         std::cout << "Share command allowed only in personal directory and its subdirectories.\n";
         return;
     }
-    std::string sourceFile = resolvePath(filename);
-    if (!Ops::FileOps::fileExists(sourceFile)) {
+    
+    // Determine the active user (if admin is viewing another user's directory, use that).
+    std::string activeUser = (currentUser == "admin" && !viewedUser.empty()) ? viewedUser : currentUser;
+    // Get the physical path corresponding to the current virtual directory.
+    std::string realDir = resolvePath(currentDir);
+    
+    // Load the mapping file for the current directory.
+    // Here we use "dummy" as the mapping file name base for directories that already have a mapping.
+    json mapping = loadUserFileMapping(realDir, "dummy", UOps::UserOps::getUser(activeUser).privateKey);
+    bool found = false;
+    std::string fileHash;
+    if (mapping.contains("files")) {
+        for (auto &item : mapping["files"].items()) {
+            if (item.value()[0].get<std::string>() == filename) {
+                found = true;
+                fileHash = item.key();
+                break;
+            }
+        }
+    }
+    if (!found) {
         std::cout << "File " << filename << " doesn't exist\n";
         return;
     }
+    // Construct the actual file path from the mapping.
+    std::string sourceFile = realDir + "/" + fileHash;
+    if (!Ops::FileOps::fileExists(sourceFile)) {
+        std::cout << "File " << filename << " doesn't exist on disk\n";
+        return;
+    }
+    // Now continue as before using global mapping to locate the target user's shared folder.
     json global = loadGlobalMapping();
     if (!global.contains(targetUser)) {
         std::cout << "User " << targetUser << " doesn't exist in global mapping.\n";
@@ -459,13 +485,14 @@ void InteractiveShell::handle_share(const std::string &args) {
     std::string targetDir = FILESYSTEM_DIR + "/" + SecOps::SecurityOps::sha256(targetUser) + "/" + targetSharedHash;
     Ops::FileOps::makeDirectory(targetDir);
     std::string fileData = Ops::FileOps::readFile(sourceFile);
-    std::string hashName = SecOps::SecurityOps::sha256(filename);
-    global[targetUser]["shared_files"][hashName] = filename;
+    // Use the same hash key for the file.
+    global[targetUser]["shared_files"][fileHash] = filename;
     saveGlobalMapping(global);
-    std::string targetFile = targetDir + "/" + hashName;
+    std::string targetFile = targetDir + "/" + fileHash;
     Ops::FileOps::writeFile(targetFile, fileData);
     std::cout << "Shared file with " << targetUser << " at /shared/" << filename << "\n";
 }
+
 
 /**
  * handle_mkdir:
