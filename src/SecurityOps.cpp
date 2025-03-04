@@ -76,7 +76,7 @@ bool SecurityOps::generateRSAKeyPair(const std::string &username)
 
     // Write private key to file.
     {
-        std::string privFilename = username + "_private.pem";
+        std::string privFilename = username + "_keyfile.pem";
         BIO* bio = BIO_new_file(privFilename.c_str(), "w");
         if (!bio) {
             EVP_PKEY_free(pkey);
