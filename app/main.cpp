@@ -78,7 +78,7 @@ static void initFortress() {
         std::filesystem::create_directories(sharedDir);
 
         // put admin in memory
-        UOps::UserOps::users["admin"] = UOps::User{"admin", adminPriv, "", true};
+        UOps::UserOps::users["admin"] = UOps::User{"admin", adminPriv, admin, true};
 
         // create admin's per-user mapping
         json adminMapping;
@@ -98,7 +98,7 @@ static void initFortress() {
         pubF.close();
 
         // encrypt & store in adminDir
-        std::string mappingFileName = SecOps::SecurityOps::sha256("admin_file_mapping.json");
+        std::string mappingFileName = SecOps::SecurityOps::sha256("user_file_mapping.json");
         std::string mappingFilePath = adminDir + "/" + mappingFileName;
         std::string encMapping = SecOps::SecurityOps::rsaEncrypt(mappingStr, adminPub);
         Ops::FileOps::writeFile(mappingFilePath, encMapping);
