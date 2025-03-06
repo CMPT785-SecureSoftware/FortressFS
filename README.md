@@ -10,6 +10,39 @@ A secure filesystem with key-based authentication, enforced access control, and 
   - C++17 filesystem library
 - Build System: "fortressfs"
 
+# How to Build
+Follow these steps to build a standalone static executable for Ubuntu:
+
+1. **Install Dependencies**
+
+   Ensure you have the required dependencies installed. For Ubuntu, you may need:
+   - A C++ compiler with C++17 support (e.g., `g++`)
+   - OpenSSL development libraries (for static linking, ensure static libraries are installed):
+```bash
+     sudo apt-get update
+     sudo apt-get install g++ libssl-dev
+```
+   - Since [nlohmann/json](https://github.com/nlohmann/json) is header-only, you can install it in the system via:
+```bash
+     sudo apt-get install nlohmann-json3-dev
+```
+
+2. **Clone the Repository**
+
+   Clone or download your project repository and navigate to the project directory:
+   ```bash
+   git clone <your-repo-url>
+   cd <your-repo-directory>
+   ```
+
+3. **Compile with Static Linking**
+
+   Use the following command to build the executable with static linking:
+   ```bash
+   g++ -static -static-libgcc -static-libstdc++ -I include src/*.cpp app/main.cpp -lssl -lcrypto -o fortresses
+   ```
+
+
 # How to Run
 ## First Run (Admin Setup):
 On the first run, if no admin keyfile exists, the program creates the necessary folder structure and generates the admin key pair. Run:

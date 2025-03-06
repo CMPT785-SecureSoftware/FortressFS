@@ -1,7 +1,6 @@
 admin_keys/
 private_keys/
 public_keys/
-fortressfs
 filesystem/
 *.pem
 *.json
