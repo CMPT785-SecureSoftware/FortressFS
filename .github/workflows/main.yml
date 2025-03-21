@@ -32,7 +32,7 @@ jobs:
 
       - name: Upload to Coverity
         run: |
-          curl --form token=${{ secrets.COVERITY_PASSPHRASE_Fortress }} \
+          curl --form token=${{ secrets.COVERITY_PASSPHRASE}} \
                --form email=midhunjmanoj9@gmail.com \
                --form file=@analysis.tar.gz \
                --form version="1.0" \
