@@ -1,0 +1,40 @@
+name: Coverity Scan
+on: 
+  workflow_dispatch:  # Allows manual triggering
+
+jobs:
+  coverity-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Install Dependencies
+        run: sudo apt-get install -y build-essential cmake wget curl
+
+      - name: Download Coverity
+        run: |
+          curl --silent --output coverity_tool.tgz \
+          --data "token=${{ secrets.COVERITY_PASSPHRASE }}&project=CMPT785-SecureSoftware/FortressFS" \
+          https://scan.coverity.com/download/linux64
+          tar -xvzf coverity_tool.tgz
+          COVERITY_DIR=$(find . -type d -name "cov-analysis-linux64-*")
+          echo "Coverity installed in $COVERITY_DIR"
+          echo "COVERITY_DIR=$COVERITY_DIR" >> $GITHUB_ENV
+          
+          chmod +x $COVERITY_DIR/bin/*
+      - name: Build with Coverity
+        run: |
+          mkdir -p cov-int
+          ${{ env.COVERITY_DIR }}/bin/cov-build --dir cov-int make
+      - name: Compress Results
+        run: tar czvf analysis.tar.gz cov-int
+
+      - name: Upload to Coverity
+        run: |
+          curl --form token=${{ secrets.COVERITY_PASSPHRASE_Fortress }} \
+               --form email=midhunjmanoj9@gmail.com \
+               --form file=@analysis.tar.gz \
+               --form version="1.0" \
+               --form description="Static Analysis" \
+               https://scan.coverity.com/builds?project=CMPT785-SecureSoftware/FortressFS
