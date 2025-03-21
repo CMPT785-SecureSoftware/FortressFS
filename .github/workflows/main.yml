@@ -26,7 +26,9 @@ jobs:
       - name: Build with Coverity
         run: |
           mkdir -p cov-int
-          ${{ env.COVERITY_DIR }}/bin/cov-build --dir cov-int make
+          ${{ env.COVERITY_DIR }}/bin/cov-build --dir cov-int \
+            g++ -static -static-libgcc -static-libstdc++ -I include src/*.cpp app/main.cpp -lssl -lcrypto -o fortresses
+
       - name: Compress Results
         run: tar czvf analysis.tar.gz cov-int
 
