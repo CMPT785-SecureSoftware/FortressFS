@@ -23,6 +23,13 @@ jobs:
           echo "COVERITY_DIR=$COVERITY_DIR" >> $GITHUB_ENV
           
           chmod +x $COVERITY_DIR/bin/*
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install nlohmann-json3-dev
+          sudo apt-get install g++ libssl-dev
+          
       - name: Build with Coverity
         run: |
           mkdir -p cov-int
