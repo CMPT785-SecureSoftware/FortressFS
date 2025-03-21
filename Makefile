@@ -1,25 +1,20 @@
-cmake_minimum_required(VERSION 3.10)
-project(SecureFS LANGUAGES CXX)
+# Makefile for FortressFS static build
 
-# Use C++17 or later
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+CXX = g++
+CXXFLAGS = -static -static-libgcc -static-libstdc++ -Iinclude
+LDFLAGS = -lssl -lcrypto
+SRC_DIR = src
+APP_DIR = app
+TARGET = fortresses
 
-# Find required libraries
-find_package(OpenSSL REQUIRED)
+# Collect all .cpp files
+SRCS = $(wildcard $(SRC_DIR)/*.cpp) $(APP_DIR)/main.cpp
+OBJS = $(SRCS:.cpp=.o)
 
-# Include directories
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+all: $(TARGET)
 
-# Collect source files
-file(GLOB SOURCES
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/app/*.cpp"
-)
+$(TARGET): $(SRCS)
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
-add_executable(securefs ${SOURCES})
-
-# Just link with -lreadline directly
-target_link_libraries(securefs PRIVATE -lreadline)
-
-target_link_libraries(securefs OpenSSL::SSL OpenSSL::Crypto Readline::Readline)
+clean:
+	rm -f $(TARGET) $(SRC_DIR)/*.o $(APP_DIR)/*.o
