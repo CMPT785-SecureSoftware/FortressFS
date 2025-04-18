@@ -279,10 +279,12 @@ std::string UserOps::login(const std::string &keyfilePath) {
             users[user.key()] = User{user.key(), user.value(), "", false};
         }
     }
-    // print all users
-    std::cout << "[Debug] All users in memory:\n";
-    for (const auto &user : users) {
-        std::cout << user.first << "\n";
+    else {
+        // If not admin, check if the user is in the mapping
+        if (users.find(uname) == users.end()) {
+            Ops::FileOps::appendErrorLog("[Debug] login: user not found in mapping " + uname);
+            return "";
+        }
     }
     return uname;
 }
