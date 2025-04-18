@@ -259,9 +259,6 @@ std::string UserOps::login(const std::string &keyfilePath) {
         Ops::FileOps::appendErrorLog("[Debug] login: public key mismatch for " + uname);
         return "";
     }
-    else{
-        Ops::FileOps::appendErrorLog("[Debug] login: public key matches for " + uname);
-    }
     bool adminFlag = (uname == "admin");
     users[uname] = User{uname, keyData, userPub, adminFlag};
     return uname;
