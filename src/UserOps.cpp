@@ -261,6 +261,29 @@ std::string UserOps::login(const std::string &keyfilePath) {
     }
     bool adminFlag = (uname == "admin");
     users[uname] = User{uname, keyData, userPub, adminFlag};
+    // if user is admin, open admin_mapping.json and get all users in the list to the in-memory cache
+    if (adminFlag) {
+        std::string adminMappingFileName = SecOps::SecurityOps::sha256("admin_mapping.json");
+        std::string adminMappingPath = "filesystem/" + adminMappingFileName;
+        json adminMapping;
+        if (Ops::FileOps::fileExists(adminMappingPath)) {
+            std::string enc = Ops::FileOps::readFile(adminMappingPath);
+            try {
+                std::string dec = SecOps::SecurityOps::hybridDecrypt(enc, keyData);
+                adminMapping = json::parse(dec);
+            } catch (...) {
+                adminMapping = json::object();
+            }
+        }
+        for (auto &user : adminMapping.items()) {
+            users[user.key()] = User{user.key(), user.value(), "", false};
+        }
+    }
+    // print all users
+    std::cout << "[Debug] All users in memory:\n";
+    for (const auto &user : users) {
+        std::cout << user.first << "\n";
+    }
     return uname;
 }
 
