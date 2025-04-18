@@ -357,6 +357,7 @@ void InteractiveShell::handle_ls() {
         std::cout << "d -> ..\n";
         std::cout << "personal\n";
         std::cout << "shared\n";
+        std::cout << currentDir << "\n";
         return;
     }
     std::string realDir = resolvePath(currentDir);
