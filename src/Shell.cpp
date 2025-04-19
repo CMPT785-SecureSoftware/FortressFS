@@ -681,7 +681,7 @@ void InteractiveShell::handle_mkfile(const std::string &args) {
         return;
     }
     // Iterate over every user entry in the mapping
-    for (auto &userEntry : globalMap.items()) {
+    for (auto &userEntry : global.items()) {
         const std::string &otherUser = userEntry.key();
         if (otherUser == activeUser) continue;
         auto &info = userEntry.value();
@@ -842,7 +842,7 @@ void InteractiveShell::start() {
                 std::string rest;
                 std::getline(iss, rest);
                 if (!rest.empty() && rest[0]==' ') rest.erase(rest.begin());
-                handle_share(rest);
+                handle_share(rest, /*silent=*/false);
                 break;
             }
             case CMD_MKDIR: {
