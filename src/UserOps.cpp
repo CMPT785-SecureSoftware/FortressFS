@@ -5,6 +5,7 @@
 #include <sstream>
 #include <iostream>
 #include <filesystem>
+#include <vector>
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;

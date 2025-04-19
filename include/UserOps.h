@@ -3,6 +3,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <vector>
 #include <nlohmann/json.hpp>
 
 // Create an alias for convenience.
