@@ -385,15 +385,18 @@ void InteractiveShell::handle_ls() {
     if (isInPersonalDirectory(currentDir)) {
         json filemap = UOps::UserOps::loadUserFileMappingPublic(activeUser, UOps::UserOps::getUser(activeUser).privateKey);
         if (filemap.empty() || !filemap.contains("entries")) {
-            for (auto &entry : std::filesystem::directory_iterator(realDir)) {
-                std::cout << entry.path().filename().string() << "\n";
-            }
+            Ops::FileOps::appendErrorLog("[Debug] handle_ls: user_file_mapping.json is empty or missing 'entries' for " + activeUser);
             return;
         }
         for (auto &item : filemap["entries"].items()) {
+            // hash of current directory
+            std::string hashedDir = SecOps::SecurityOps::sha256(currentDir);
+            // Check if the item is not part of current directory, skip
+            if (item.value()["parent"] != hashedDir) continue;
             if (item.value().contains("name") && item.value().contains("type")) {
                 std::string name = item.value()["name"];
                 std::string type = item.value()["type"];
+                
                 if (type == "d")
                     std::cout << "d -> " << name << "\n";
                 else
@@ -576,8 +579,15 @@ void InteractiveShell::handle_mkdir(const std::string &dirname) {
     std::cout << "Created directory " << dirname << "\n";
     // Update the user_file_mapping "entries" for the active user.
     std::string activeUser = (currentUser == "admin" && !viewedUser.empty()) ? viewedUser : currentUser;
+    // hash of current directory
+    std::string parentDir = SecOps::SecurityOps::sha256(currentDir);
     json mapping = UOps::UserOps::loadUserFileMappingPublic(activeUser, UOps::UserOps::getUser(activeUser).privateKey);
-    mapping["entries"][hashed] = { {"name", dirname}, {"type", "d"} };
+    if (mapping.empty() || !mapping.contains("entries")) {
+        mapping["entries"] = json::object();
+    }
+    // Add the new directory to the mapping.
+    mapping["entries"][hashed] = { {"name", dirname}, {"type", "d"} , {"parent", parentDir} };
+    // Save the updated mapping.
     if (!UOps::UserOps::saveUserFileMappingPublic(activeUser, UOps::UserOps::getUser(activeUser).publicKey, mapping)) {
         std::cout << "Warning: Failed to update directory mapping.\n";
     }
@@ -630,7 +640,14 @@ void InteractiveShell::handle_mkfile(const std::string &args) {
     std::cout << "Created file " << filename << "\n";
     // Update the user_file_mapping "entries" for the active user.
     json mapping = UOps::UserOps::loadUserFileMappingPublic(activeUser, UOps::UserOps::getUser(activeUser).privateKey);
-    mapping["entries"][hashed] = { {"name", filename}, {"type", "f"} };
+    // take hash of current directory
+    std::string parentDir = SecOps::SecurityOps::sha256(currentDir);
+    if (mapping.empty() || !mapping.contains("entries")) {
+        mapping["entries"] = json::object();
+    }
+    // Add the new file to the mapping.
+    mapping["entries"][hashed] = { {"name", filename}, {"type", "f"} , {"parent", parentDir} };
+    // Save the updated mapping.
     if (!UOps::UserOps::saveUserFileMappingPublic(activeUser, UOps::UserOps::getUser(activeUser).publicKey, mapping)) {
         std::cout << "Warning: Failed to update file mapping.\n";
     }
