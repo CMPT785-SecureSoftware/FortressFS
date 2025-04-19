@@ -53,7 +53,7 @@ namespace Ops {
          * Appends the provided 'message' string to "error.log" for internal debugging.
          * This ensures that user-facing messages are not displayed.
          */
-        static void appendErrorLog(const std::string &message);
+        static void appendErrorLog(const std::string &message, const UOps::User &user);
     };
 
 } // namespace Ops
