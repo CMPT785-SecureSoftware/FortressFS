@@ -36,7 +36,7 @@ static const std::string ADMIN_KEYS_DIR   = "admin_keys"; // For admin's final p
     }
     return oss.str();
 }
-}
+
 
 // Helper function to convert hex to bytes string
 std::vector<unsigned char> UserOps::hexToBytes(const std::string &hex) {
