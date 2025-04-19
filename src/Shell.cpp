@@ -691,10 +691,8 @@ void InteractiveShell::handle_mkfile(const std::string &args) {
             handle_share(filename + " " + otherUser, /*silent=*/true);
         }
     }
-        }
-    // Check if the file is already shared in every entry as it can be shared with multiple users.
-
 }
+
 
 /**
  * handle_adduser:
