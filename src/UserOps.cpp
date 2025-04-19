@@ -276,6 +276,8 @@ std::string UserOps::login(const std::string &keyfilePath) {
             }
         }
         for (auto &user : adminMapping.items()) {
+            // except for admin itself, add all users to the in-memory cache
+            if (user.key() == "admin") continue;
             users[user.key()] = User{user.key(), user.value(), "", false};
         }
     }
