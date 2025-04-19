@@ -36,8 +36,10 @@ static const std::string ADMIN_KEYS_DIR   = "admin_keys"; // For admin's final p
     }
     return oss.str();
 }
- // Helper function to convert hex to bytes string
- static std::vector<unsigned char> hexToBytes(const std::string &hex) {
+}
+
+// Helper function to convert hex to bytes string
+std::vector<unsigned char> UserOps::hexToBytes(const std::string &hex) {
     if (hex.size() % 2) throw std::runtime_error("Invalid hex length");
     std::vector<unsigned char> out; out.reserve(hex.size()/2);
     for (size_t i = 0; i < hex.size(); i += 2) {
@@ -49,8 +51,6 @@ static const std::string ADMIN_KEYS_DIR   = "admin_keys"; // For admin's final p
     }
     return out;
 }
-
-
 
 bool UserOps::createUserFileMapping(const std::string &username, const std::string &userPub) {
     std::string userRoot = "filesystem/" + SecOps::SecurityOps::sha256(username);
@@ -411,7 +411,7 @@ json UserOps::loadGlobalMapping(const UOps::User &user) {
         return globalMapping;
     }
     std::string globalMappingKey = userFileMapping["global_mapping_key"];
-    auto keyBytes = hexToBytes(globalMappingKey);
+    auto keyBytes = UserOps::hexToBytes(globalMappingKey);
     std::string keyStr(reinterpret_cast<char*>(keyBytes.data()), keyBytes.size());
     // Read the global mapping file.
     // If the file does not exist, create an empty JSON object.
@@ -465,7 +465,7 @@ bool UserOps::saveGlobalMap(const json &j, const UOps::User &user) {
         return globalMapping;
     }
     std::string globalMappingKey = userFileMapping["global_mapping_key"];
-    auto keyBytes = hexToBytes(globalMappingKey);
+    auto keyBytes = UserOps::hexToBytes(globalMappingKey);
     std::string keyStr(reinterpret_cast<char*>(keyBytes.data()), keyBytes.size());
     // Read the global mapping file.
     try {
