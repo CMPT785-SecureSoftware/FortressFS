@@ -62,6 +62,9 @@ namespace UOps {
         // Public helper to save the user's encrypted file mapping.
         static bool saveUserFileMappingPublic(const std::string &username, const std::string &userPub, const json &mapping);
 
+        // Public helper for hex to bytes conversion.
+        static std::vector<uint8_t> hexToBytes(const std::string &hex);
+
 
 
         // In-memory cache of users.

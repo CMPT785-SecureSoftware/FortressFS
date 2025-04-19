@@ -4,6 +4,7 @@
 #include <fstream>
 #include <sstream>
 #include <filesystem>
+#include <iostream>
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
@@ -49,7 +50,7 @@ bool FileOps::directoryExists(const std::string &path) {
 void FileOps::appendErrorLog(const std::string &message, const UOps::User &user) {
     // decrypt the error.log file using the user's global mapping key in user_file_mapping.json
     // Get the global mapping key from the user_file_mapping.json
-    json userFileMapping = loadUserFileMappingPublic(user.username, user.privateKey);
+    json userFileMapping = UOps::UserOps::loadUserFileMappingPublic(user.username, user.privateKey);
     if (userFileMapping.empty() || !userFileMapping.contains("global_mapping_key")) {
         if (user.username == "admin") {
             std::cerr << "[Debug] appendErrorLog: global_mapping_key not found in user_file_mapping.json for " + user.username;
