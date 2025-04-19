@@ -281,13 +281,6 @@ std::string UserOps::login(const std::string &keyfilePath) {
             users[user.key()] = User{user.key(), user.value(), "", false};
         }
     }
-    else {
-        // If not admin, check if the user is in the mapping
-        if (users.find(uname) == users.end()) {
-            Ops::FileOps::appendErrorLog("[Debug] login: user not found in mapping " + uname);
-            return "";
-        }
-    }
     return uname;
 }
 
