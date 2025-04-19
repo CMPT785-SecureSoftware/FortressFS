@@ -357,7 +357,6 @@ void InteractiveShell::handle_ls() {
         std::cout << "d -> ..\n";
         std::cout << "personal\n";
         std::cout << "shared\n";
-        std::cout << currentDir << "\n";
         return;
     }
     std::string realDir = resolvePath(currentDir);
@@ -573,7 +572,7 @@ void InteractiveShell::handle_mkdir(const std::string &dirname) {
         return;
     }
     if (!Ops::FileOps::makeDirectory(newPath)) {
-        std::cout << "Failed to create directory\n";
+        std::cout << "Failed to create directory\nFiles and directories should have unique names in the same directory.\n";
         return;
     }
     std::cout << "Created directory " << dirname << "\n";
