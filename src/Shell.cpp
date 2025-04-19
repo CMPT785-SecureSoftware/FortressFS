@@ -92,7 +92,8 @@ std::string InteractiveShell::resolvePath(const std::string &vpath) {
         
         json global = UOps::UserOps::loadGlobalMapping(UOps::UserOps::getUser(activeUser));
         if (global.empty()) {
-            Ops::FileOps::appendErrorLog("[Debug] resolvePath: loadGlobalMapping failed for " + activeUser);
+            Ops::FileOps::appendErrorLog("[Debug] resolvePath: loadGlobalMapping failed for " + activeUser,
+                                          UOps::UserOps::getUser(activeUser));
             return "";
         }
         std::string sharedHash;
@@ -364,7 +365,8 @@ void InteractiveShell::handle_ls() {
     if (isInSharedDirectory(currentDir)) {
         json global = UOps::UserOps::loadGlobalMapping(UOps::UserOps::getUser(activeUser));
         if (global.empty()) {
-            Ops::FileOps::appendErrorLog("[Debug] handle_ls: global_mapping.json is empty");
+            Ops::FileOps::appendErrorLog("[Debug] handle_ls: global_mapping.json is empty",
+                                          UOps::UserOps::getUser(activeUser));
             return;
         }
         // Check if the user has shared files and it is not empty.
@@ -381,7 +383,8 @@ void InteractiveShell::handle_ls() {
     if (isInPersonalDirectory(currentDir)) {
         json filemap = UOps::UserOps::loadUserFileMappingPublic(activeUser, UOps::UserOps::getUser(activeUser).privateKey);
         if (filemap.empty() || !filemap.contains("entries")) {
-            Ops::FileOps::appendErrorLog("[Debug] handle_ls: user_file_mapping.json is empty or missing 'entries' for " + activeUser);
+            Ops::FileOps::appendErrorLog("[Debug] handle_ls: user_file_mapping.json is empty or missing 'entries' for " + activeUser,
+                                          UOps::UserOps::getUser(activeUser));
             return;
         }
         for (auto &item : filemap["entries"].items()) {
@@ -419,7 +422,8 @@ void InteractiveShell::handle_cat(const std::string &filename) {
     if (isInSharedDirectory(currentDir)) {
         json global = UOps::UserOps::loadGlobalMapping(UOps::UserOps::getUser(activeUser));
         if (global.empty()) {
-            Ops::FileOps::appendErrorLog("[Debug] handle_cat: global_mapping.json is empty");
+            Ops::FileOps::appendErrorLog("[Debug] handle_cat: global_mapping.json is empty",
+                                          UOps::UserOps::getUser(activeUser));
             return;
         }
         // Check if the file exists in the shared_files mapping.
@@ -528,14 +532,16 @@ void InteractiveShell::handle_share(const std::string &args) {
     // Update global mapping: add the shared file entry.
     json global = UOps::UserOps::loadGlobalMapping(UOps::UserOps::getUser(activeUser));
     if (global.empty()) {
-        Ops::FileOps::appendErrorLog("[Debug] handle_share: global_mapping.json is empty");
+        Ops::FileOps::appendErrorLog("[Debug] handle_share: global_mapping.json is empty",
+                                      UOps::UserOps::getUser(activeUser));
         return;
     }
     std::string hashedName = SecOps::SecurityOps::sha256(filename);
     global[targetUser]["shared_files"][hashedName] = filename;
     // Save the updated global mapping.
     if (!UOps::UserOps::saveGlobalMap(global, UOps::UserOps::getUser(activeUser))) {
-        Ops::FileOps::appendErrorLog("[Debug] handle_share: failed to save global mapping");
+        Ops::FileOps::appendErrorLog("[Debug] handle_share: failed to save global mapping",
+                                      UOps::UserOps::getUser(activeUser));
     }
     // Write the new ciphertext to the target user's shared folder.
     std::string targetSharedHash;
