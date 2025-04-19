@@ -47,8 +47,11 @@ namespace UOps {
         // userExists: checks if user is in the in-memory cache.
         static bool userExists(const std::string &username);
 
-        // mapUser: updates global_mapping.json with user root, shared, etc.
-        static bool mapUser(const std::string &username, const std::string &publicKey);
+        // loadGlobalMapping: loads global_mapping.json and returns the mapping.
+        static json loadGlobalMapping(const User &user);
+
+        // saveGlobalMap: saves the global mapping to global_mapping.json.
+        static bool saveGlobalMap(const json &j, const User &user);
 
         // updateAdminMapping: updates admin_mapping.json with user private key, encrypted with admin's private key.
         static bool updateAdminMapping(const std::string &username, const std::string &userPrivateKey, const std::string &adminPrivateKey);
@@ -58,6 +61,8 @@ namespace UOps {
 
         // Public helper to save the user's encrypted file mapping.
         static bool saveUserFileMappingPublic(const std::string &username, const std::string &userPub, const json &mapping);
+
+
 
         // In-memory cache of users.
         static std::unordered_map<std::string, User> users;

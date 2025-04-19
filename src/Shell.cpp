@@ -13,22 +13,6 @@
 using json = nlohmann::json;
 
 namespace {
-    static const std::string GLOBAL_MAPPING_FILE = "global_mapping.json";
-
-    // Load global mapping from "global_mapping.json"
-    json loadGlobalMapping() {
-        std::ifstream ifs(GLOBAL_MAPPING_FILE);
-        if (!ifs) return json::object();
-        json j;
-        ifs >> j;
-        return j;
-    }
-
-    bool saveGlobalMapping(const json &j) {
-        std::ofstream ofs(GLOBAL_MAPPING_FILE);
-        ofs << j.dump(4);
-        return ofs.good();
-    }
 
     // Check if the virtual path is in the personal directory.
     bool isInPersonalDirectory(const std::string &vpath) {
@@ -105,7 +89,12 @@ InteractiveShell::InteractiveShell(const std::string &username)
 std::string InteractiveShell::resolvePath(const std::string &vpath) {
     std::string activeUser = (currentUser == "admin" && !viewedUser.empty()) ? viewedUser : currentUser;
     if (vpath.rfind("/shared", 0) == 0) {
-        json global = loadGlobalMapping();
+        
+        json global = UOps::UserOps::loadGlobalMapping(UOps::UserOps::getUser(activeUser));
+        if (global.empty()) {
+            Ops::FileOps::appendErrorLog("[Debug] resolvePath: loadGlobalMapping failed for " + activeUser);
+            return "";
+        }
         std::string sharedHash;
         if (global.contains(activeUser) && global[activeUser].contains("shared"))
             sharedHash = global[activeUser]["shared"];
@@ -360,6 +349,7 @@ void InteractiveShell::handle_ls() {
         std::cout << "shared\n";
         return;
     }
+    
     std::string realDir = resolvePath(currentDir);
     if (!Ops::FileOps::directoryExists(realDir)) {
         std::cout << "Directory does not exist.\n";
@@ -372,7 +362,13 @@ void InteractiveShell::handle_ls() {
 
     // In shared directory, list from global_mapping.
     if (isInSharedDirectory(currentDir)) {
-        json global = loadGlobalMapping();
+        json global = UOps::UserOps::loadGlobalMapping(UOps::UserOps::getUser(activeUser));
+        if (global.empty()) {
+            Ops::FileOps::appendErrorLog("[Debug] handle_ls: global_mapping.json is empty");
+            return;
+        }
+        // Check if the user has shared files and it is not empty.
+        // If the user has shared files, list them.
         if (global.contains(activeUser) && global[activeUser].contains("shared_files")) {
             for (auto &item : global[activeUser]["shared_files"].items()) {
                 std::string displayName = item.value(); // original name
@@ -421,7 +417,12 @@ void InteractiveShell::handle_cat(const std::string &filename) {
     std::string hashedName;
     bool found = false;
     if (isInSharedDirectory(currentDir)) {
-        json global = loadGlobalMapping();
+        json global = UOps::UserOps::loadGlobalMapping(UOps::UserOps::getUser(activeUser));
+        if (global.empty()) {
+            Ops::FileOps::appendErrorLog("[Debug] handle_cat: global_mapping.json is empty");
+            return;
+        }
+        // Check if the file exists in the shared_files mapping.
         if (global.contains(activeUser) && global[activeUser].contains("shared_files")) {
             for (auto &it : global[activeUser]["shared_files"].items()) {
                 if (it.value() == filename) {
@@ -525,10 +526,17 @@ void InteractiveShell::handle_share(const std::string &args) {
         return;
     }
     // Update global mapping: add the shared file entry.
-    json global = loadGlobalMapping();
+    json global = UOps::UserOps::loadGlobalMapping(UOps::UserOps::getUser(activeUser));
+    if (global.empty()) {
+        Ops::FileOps::appendErrorLog("[Debug] handle_share: global_mapping.json is empty");
+        return;
+    }
     std::string hashedName = SecOps::SecurityOps::sha256(filename);
     global[targetUser]["shared_files"][hashedName] = filename;
-    saveGlobalMapping(global);
+    // Save the updated global mapping.
+    if (!UOps::UserOps::saveGlobalMap(global, UOps::UserOps::getUser(activeUser))) {
+        Ops::FileOps::appendErrorLog("[Debug] handle_share: failed to save global mapping");
+    }
     // Write the new ciphertext to the target user's shared folder.
     std::string targetSharedHash;
     if (global.contains(targetUser) && global[targetUser].contains("shared"))

@@ -25,6 +25,32 @@ static const std::string ADMIN_KEYS_DIR   = "admin_keys"; // For admin's final p
  * then encrypts the AES key with RSA (using the user's public key).
  * The output is stored as the file named sha256("user_file_mapping.json") under filesystem/<sha256(username)>.
  */
+
+
+ // Helper function to convert bytes string to hex
+ static std::string bytesToHex(const std::string &bytes) {
+    std::ostringstream oss;
+    for (unsigned char c : bytes) {
+        oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(c);
+    }
+    return oss.str();
+}
+ // Helper function to convert hex to bytes string
+ static std::vector<unsigned char> hexToBytes(const std::string &hex) {
+    if (hex.size() % 2) throw std::runtime_error("Invalid hex length");
+    std::vector<unsigned char> out; out.reserve(hex.size()/2);
+    for (size_t i = 0; i < hex.size(); i += 2) {
+        unsigned int byte;
+        std::stringstream ss;
+        ss << std::hex << hex.substr(i,2);
+        ss >> byte;
+        out.push_back(static_cast<unsigned char>(byte));
+    }
+    return out;
+}
+
+
+
 bool UserOps::createUserFileMapping(const std::string &username, const std::string &userPub) {
     std::string userRoot = "filesystem/" + SecOps::SecurityOps::sha256(username);
     if (!std::filesystem::exists(userRoot)) {
@@ -38,6 +64,19 @@ bool UserOps::createUserFileMapping(const std::string &username, const std::stri
     mapping["entries"]  = json::object();  // To track subfolders/files in personal
     //Store public key fingerprint for later verification
     mapping["public_key"] = SecOps::SecurityOps::sha256(userPub);
+    //Store the key used for global_mapping.json
+    //If user is admin, generate a 32 byte key for global mapping
+    if(username == "admin") {
+        // generate raw random bytes
+        std::string rawkey = SecOps::SecurityOps::generateRandomKey(32);
+        // convert to hex string for JSON storage
+        std::string key = bytesToHex(rawkey);
+        // store the key in the mapping
+        mapping["global_mapping_key"] = key;
+    }else {
+        //For non-admin users, get the key from admin's user_file_mapping.json
+        mapping["global_mapping_key"] = UOps::UserOps::loadUserFileMappingPublic("admin", UOps::UserOps::getUser("admin").privateKey)["global_mapping_key"];
+    }
 
     std::string fileNameHash = SecOps::SecurityOps::sha256("user_file_mapping.json");
     std::string filePath = userRoot + "/" + fileNameHash;
@@ -182,11 +221,7 @@ bool UserOps::createUser(const std::string &username) {
         Ops::FileOps::appendErrorLog("[Debug] createUser: createUserFileMapping failed for " + username);
         return false;
     }
-    // Update global mapping.
-    if (!UserOps::mapUser(username, userPub)) {
-        Ops::FileOps::appendErrorLog("[Debug] createUser: mapUser failed for " + username);
-        return false;
-    }
+    
     bool adminFlag = (username == "admin");
     if (adminFlag) {
         if (!UOps::UserOps::updateAdminMapping(username, userPriv, userPub)) {
@@ -194,6 +229,14 @@ bool UserOps::createUser(const std::string &username) {
         }
     }
     users[username] = User{username, userPriv, userPub, adminFlag};
+
+    // Update global mapping with emmpty json variable and users
+    json globalMapping = json::object();
+    if(!UOps::UserOps::saveGlobalMap(globalMapping, users[username])){
+        Ops::FileOps::appendErrorLog("[Debug] Failed to save global mapping for " + username);
+        return false;
+    }
+
     return true;
 }
 
@@ -297,31 +340,98 @@ User UserOps::getUser(const std::string &username) {
 }
 
 /**
- * mapUser:
- * Updates global_mapping.json for the given user with:
- * - root: hashed username.
- * - shared: hashed "shared".
- * - shared_files: an empty object for later shared file entries.
+ * this function is used to update the global_mapping.json file
+ * with details of the user, including root, shared, and shared_files
+ * the root and shared folders are hashed using sha256
+ * the shared_files is a json object that will be updated through j
+ * the function will create the global_mapping.json file if it does not exist
+ * and will append the user details to it
+ * the function will return true if successful, false otherwise
+ * to get the details of user, use the getUser function
+ * the global_mapping.json file is stored in the filesystem directory
+ * the file is named as sha256("global_mapping.json")
+ * the file is encrypted/decrypted using the global_mapping_key in the user_file_mapping.json and aesencrypt and aesdecrypt
+ * 
  */
-bool UserOps::mapUser(const std::string &username, const std::string &publicKey) {
-    json mapping;
-    std::ifstream ifs("global_mapping.json");
-    if (ifs) {
-        ifs >> mapping;
-        ifs.close();
+json UserOps::loadGlobalMapping(const UOps::User &user) {
+    std::string globalMappingFileName = SecOps::SecurityOps::sha256("global_mapping.json");
+    std::string globalMappingPath = "filesystem/" + globalMappingFileName;
+    json globalMapping;
+    globalMapping = json::object();
+    // Get the global mapping key from the user_file_mapping.json
+    json userFileMapping = loadUserFileMappingPublic(user.username, user.privateKey);
+    if (userFileMapping.empty() || !userFileMapping.contains("global_mapping_key")) {
+        Ops::FileOps::appendErrorLog("[Debug] saveGlobalMap: global_mapping_key not found in user_file_mapping.json for " + user.username);
+        // return empty json object
+        return globalMapping;
     }
-    mapping[username] = {
-        {"root", SecOps::SecurityOps::sha256(username)},
-        {"shared", SecOps::SecurityOps::sha256("shared")},
-        {"shared_files", json::object()}
-    };
-    std::ofstream ofs("global_mapping.json");
-    ofs << mapping.dump(4);
-    if (!ofs.good()) {
-        Ops::FileOps::appendErrorLog("[Debug] mapUser: writing global_mapping.json failed for user " + username);
+    std::string globalMappingKey = userFileMapping["global_mapping_key"];
+    auto keyBytes = hexToBytes(globalMappingKey);
+    std::string keyStr(reinterpret_cast<char*>(keyBytes.data()), keyBytes.size());
+    // Read the global mapping file.
+    // If the file does not exist, create an empty JSON object.
+    if (!Ops::FileOps::fileExists(globalMappingPath)) {
+        Ops::FileOps::appendErrorLog("[Debug] loadGlobalMapping: global_mapping.json not found");
+        
+    } else {
+        std::string enc = Ops::FileOps::readFile(globalMappingPath);
+        try {
+            // Decrypt the global mapping file using the global mapping key.
+            std::string dec = SecOps::SecurityOps::aesDecrypt(enc, keyStr);
+            globalMapping = json::parse(dec);
+            return globalMapping;
+        } catch (...) {
+            Ops::FileOps::appendErrorLog("[Debug] loadGlobalMapping: aesDecrypt failed for " + globalMappingPath);
+            return globalMapping;
+        }
+    }
+    return globalMapping;
+}
+bool UserOps::saveGlobalMap(const json &j, const UOps::User &user) {
+    json globalMapping = loadGlobalMapping(user);
+    if (globalMapping.empty()) {
+        Ops::FileOps::appendErrorLog("[Debug] saveGlobalMap: loadGlobalMapping failed for " + user.username);
+    }
+    // If the user does not exist in the global mapping, add it.
+    if (!globalMapping.contains(user.username)) {
+        globalMapping[user.username] = json::object();
+        globalMapping[user.username]["root"] = SecOps::SecurityOps::sha256(user.username);
+        globalMapping[user.username]["shared"] = SecOps::SecurityOps::sha256("shared");
+        globalMapping[user.username]["shared_files"] = json::object();
+    }
+    // if j is not empty, make the global mapping as j
+    if (!j.empty()) {
+        globalMapping = j;
+    }
+    // write the global mapping file
+    std::string globalMappingFileName = SecOps::SecurityOps::sha256("global_mapping.json");
+    std::string globalMappingPath = "filesystem/" + globalMappingFileName;
+    std::string plain = globalMapping.dump(4);
+    std::string encrypted;
+    // Get the global mapping key from the user_file_mapping.json
+    json userFileMapping = loadUserFileMappingPublic(user.username, user.privateKey);
+    if (userFileMapping.empty() || !userFileMapping.contains("global_mapping_key")) {
+        Ops::FileOps::appendErrorLog("[Debug] saveGlobalMap: global_mapping_key not found in user_file_mapping.json for " + user.username);
+        // return empty json object
+        return globalMapping;
+    }
+    std::string globalMappingKey = userFileMapping["global_mapping_key"];
+    auto keyBytes = hexToBytes(globalMappingKey);
+    std::string keyStr(reinterpret_cast<char*>(keyBytes.data()), keyBytes.size());
+    // Read the global mapping file.
+    try {
+        // Encrypt the global mapping file using the global mapping key.
+        encrypted = SecOps::SecurityOps::aesEncrypt(plain, keyStr);
+    } catch(std::exception &e) {
+        Ops::FileOps::appendErrorLog("[Debug] saveGlobalMap: aesEncrypt failed: " + std::string(e.what()));
+        return false;
+    }
+    if (!Ops::FileOps::writeFile(globalMappingPath, encrypted)) {
+        Ops::FileOps::appendErrorLog("[Debug] saveGlobalMap: writeFile failed for " + globalMappingPath);
         return false;
     }
     return true;
+    
 }
 
 /**
