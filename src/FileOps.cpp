@@ -61,7 +61,7 @@ void FileOps::appendErrorLog(const std::string &message, const UOps::User &user)
         return;
     }
     std::string globalMappingKey = userFileMapping["global_mapping_key"];
-    auto keyBytes = hexToBytes(globalMappingKey);
+    auto keyBytes = UOps::UserOps::hexToBytes(globalMappingKey);
     std::string keyStr(reinterpret_cast<char*>(keyBytes.data()), keyBytes.size());
 
     // Read the error.log file if it exists
