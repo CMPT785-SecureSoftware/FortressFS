@@ -80,7 +80,7 @@ int main(int argc, char** argv) {
     std::string user = UOps::UserOps::login(keyfileName);
     if (user.empty()) {
         // We only print "Invalid keyfile" to the user, while details go to error.log
-        std::cout << "Invalid keyfile\n";
+        std::cout << "Invalid User or Key files\n";
         return 1;
     }
 
