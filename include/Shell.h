@@ -39,6 +39,7 @@ namespace Shell {
         void handle_mkdir(const std::string &dirname);
         void handle_mkfile(const std::string &args);
         void handle_adduser(const std::string &username);
+        void handle_viewlog();
 
         // Show commands depending on user role and directory
         void showHelp();

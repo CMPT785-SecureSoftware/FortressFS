@@ -36,6 +36,7 @@ namespace {
         CMD_MKDIR,
         CMD_MKFILE,
         CMD_ADDUSER,
+        CMD_VIEWLOG,
         CMD_EXIT,
         CMD_HELP
     };
@@ -51,6 +52,7 @@ namespace {
             {"mkdir", CMD_MKDIR},
             {"mkfile", CMD_MKFILE},
             {"adduser", CMD_ADDUSER},
+            {"viewlog", CMD_VIEWLOG},
             {"exit", CMD_EXIT},
             {"help", CMD_HELP}
         };
@@ -70,9 +72,9 @@ static const std::string FILESYSTEM_DIR = "filesystem";
  */
 InteractiveShell::InteractiveShell(const std::string &username)
     : currentUser(username), currentDir("/") {
-
-        isAdminFSMode = false;
-        viewedUser.clear();
+    
+    isAdminFSMode = false; // Admin starts in own root view.
+    viewedUser.clear();
     
 }
 
@@ -721,6 +723,44 @@ void InteractiveShell::handle_adduser(const std::string &username) {
 }
 
 /**
+ * handle_viewlog:
+ * Displays the error log for admin.
+ */
+void InteractiveShell::handle_viewlog() {
+    if (currentUser != "admin") {
+        std::cout << "Unknown command. Type 'help' for usage.\n";
+        return;
+    }
+    // decrypt the error.log file using the admin's global mapping key in user_file_mapping.json of admin
+    // Get the global mapping key from the user_file_mapping.json
+    json userFileMapping = UOps::UserOps::loadUserFileMappingPublic(currentUser, UOps::UserOps::getUser("admin").privateKey);
+    if (userFileMapping.empty() || !userFileMapping.contains("global_mapping_key")) {
+        std::cerr << "[Debug] appendErrorLog: global_mapping_key not found in user_file_mapping.json for admin\n";
+        return;
+    }
+    std::string globalMappingKey = userFileMapping["global_mapping_key"];
+    auto keyBytes = UOps::UserOps::hexToBytes(globalMappingKey);
+    std::string keyStr(reinterpret_cast<char*>(keyBytes.data()), keyBytes.size());
+
+    // Read the error.log file if it exists
+    // hash the name of error.log
+    std::string errorLogFileName = SecOps::SecurityOps::sha256("error.log");
+    std::string errorLogPath = "filesystem/" + errorLogFileName;
+    std::string encData = Ops::FileOps::readFile(errorLogPath);
+    // create empty decData
+    std::string decData;
+    if (!encData.empty()) {
+        try {
+            // Decrypt the error.log file using the global mapping key.
+            decData = SecOps::SecurityOps::aesDecrypt(encData, keyStr);
+            std::cout << "Error Log:\n" << decData << "\n";
+        } catch (...) {
+            std::cerr << "[Debug] appendErrorLog: global_mapping_key not found in user_file_mapping.json for admin";
+            return;
+        }
+    }
+}
+/**
  * showHelp:
  * Displays available commands based on the user's role and current directory.
  */
@@ -755,6 +795,7 @@ void InteractiveShell::showHelp() {
                       << "  adduser <user>         - Create new user\n"
                       << "  cd ..                  - Switch to filesystem view (only if you're at '/')\n"
                       << "  exit                   - Quit\n"
+                      << "  viewlog                - View error log\n"
                       << "  help                   - Show help\n";
         }
     } else {
@@ -807,7 +848,15 @@ void InteractiveShell::start() {
         {"exit", CMD_EXIT}, {"help", CMD_HELP}
     };
     while (true) {
-        std::cout << "[" << currentUser << " @filesystem:" << currentDir << "]$ ";
+        if (currentUser == "admin" && isAdminFSMode) {
+            std::cout << "[admin @filesystem]$ ";
+        } else if (currentUser == "admin" && !viewedUser.empty()) {
+            std::cout << "[" << currentUser << " @/" << viewedUser << "]$ ";
+        } 
+        else {
+            std::cout << "[" << currentUser << " @" << currentDir << "]$ ";
+        }
+        // std::cout << "[" << currentUser << " @filesystem:" << currentDir << "]$ ";
         std::string line;
         if (!std::getline(std::cin, line)) break;
         if (line.empty()) continue;
@@ -861,6 +910,9 @@ void InteractiveShell::start() {
                 handle_adduser(un);
                 break;
             }
+            case CMD_VIEWLOG:
+                handle_viewlog();
+                break;
             case CMD_EXIT:
                 return;
             case CMD_HELP:
