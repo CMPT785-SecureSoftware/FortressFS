@@ -852,8 +852,6 @@ void InteractiveShell::start() {
             std::cout << "[admin @filesystem]$ ";
         } else if (currentUser == "admin" && !viewedUser.empty()) {
             std::cout << "[" << currentUser << " @/" << viewedUser << "]$ ";
-        } else if (currentDir == "/") {
-            std::cout << "[" << currentUser << " @" << currentDir << "]$ ";
         } 
         else {
             std::cout << "[" << currentUser << " @/" << currentDir << "]$ ";
