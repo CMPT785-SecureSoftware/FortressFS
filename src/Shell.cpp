@@ -749,7 +749,7 @@ void InteractiveShell::handle_viewlog() {
     // hash the name of error.log
     std::string errorLogFileName = SecOps::SecurityOps::sha256("error.log");
     std::string errorLogPath = "filesystem/" + errorLogFileName;
-    std::string encData = readFile(errorLogPath);
+    std::string encData = Ops::FileOps::readFile(errorLogPath);
     // create empty decData
     std::string decData;
     if (!encData.empty()) {
@@ -758,7 +758,7 @@ void InteractiveShell::handle_viewlog() {
             decData = SecOps::SecurityOps::aesDecrypt(encData, keyStr);
             std::cout << "Error Log:\n" << decData << "\n";
         } catch (...) {
-            if (user.username == "admin") {
+            if (currentUser == "admin") {
                 std::cerr << "[Debug] appendErrorLog: global_mapping_key not found in user_file_mapping.json for " + user.username;
             }
             else {
