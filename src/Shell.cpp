@@ -854,7 +854,7 @@ void InteractiveShell::start() {
             std::cout << "[" << currentUser << " @/" << viewedUser << "]$ ";
         } 
         else {
-            std::cout << "[" << currentUser << " @/" << currentDir << "]$ ";
+            std::cout << "[" << currentUser << " @" << currentDir << "]$ ";
         }
         // std::cout << "[" << currentUser << " @filesystem:" << currentDir << "]$ ";
         std::string line;
