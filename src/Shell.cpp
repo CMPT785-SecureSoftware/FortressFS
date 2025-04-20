@@ -36,6 +36,7 @@ namespace {
         CMD_MKDIR,
         CMD_MKFILE,
         CMD_ADDUSER,
+        CMD_VIEWLOG,
         CMD_EXIT,
         CMD_HELP
     };
@@ -51,6 +52,7 @@ namespace {
             {"mkdir", CMD_MKDIR},
             {"mkfile", CMD_MKFILE},
             {"adduser", CMD_ADDUSER},
+            {"viewlog", CMD_VIEWLOG},
             {"exit", CMD_EXIT},
             {"help", CMD_HELP}
         };
@@ -724,6 +726,49 @@ void InteractiveShell::handle_adduser(const std::string &username) {
 }
 
 /**
+ * handle_viewlog:
+ * Displays the error log for admin.
+ */
+void InteractiveShell::handle_viewlog() {
+    if (currentUser != "admin") {
+        std::cout << "Unknown command. Type 'help' for usage.\n";
+        return;
+    }
+    // decrypt the error.log file using the admin's global mapping key in user_file_mapping.json of admin
+    // Get the global mapping key from the user_file_mapping.json
+    json userFileMapping = UOps::UserOps::loadUserFileMappingPublic(currentUser, UOps::UserOps::getUser("admin").privateKey);
+    if (userFileMapping.empty() || !userFileMapping.contains("global_mapping_key")) {
+        std::cerr << "[Debug] appendErrorLog: global_mapping_key not found in user_file_mapping.json for admin\n";
+        return;
+    }
+    std::string globalMappingKey = userFileMapping["global_mapping_key"];
+    auto keyBytes = UOps::UserOps::hexToBytes(globalMappingKey);
+    std::string keyStr(reinterpret_cast<char*>(keyBytes.data()), keyBytes.size());
+
+    // Read the error.log file if it exists
+    // hash the name of error.log
+    std::string errorLogFileName = SecOps::SecurityOps::sha256("error.log");
+    std::string errorLogPath = "filesystem/" + errorLogFileName;
+    std::string encData = readFile(errorLogPath);
+    // create empty decData
+    std::string decData;
+    if (!encData.empty()) {
+        try {
+            // Decrypt the error.log file using the global mapping key.
+            decData = SecOps::SecurityOps::aesDecrypt(encData, keyStr);
+            std::cout << "Error Log:\n" << decData << "\n";
+        } catch (...) {
+            if (user.username == "admin") {
+                std::cerr << "[Debug] appendErrorLog: global_mapping_key not found in user_file_mapping.json for " + user.username;
+            }
+            else {
+                std::cerr << "[Debug] Please contact the admin to resolve this issue.\n";
+            }
+            return;
+        }
+    }
+}
+/**
  * showHelp:
  * Displays available commands based on the user's role and current directory.
  */
@@ -758,6 +803,7 @@ void InteractiveShell::showHelp() {
                       << "  adduser <user>         - Create new user\n"
                       << "  cd ..                  - Switch to filesystem view (only if you're at '/')\n"
                       << "  exit                   - Quit\n"
+                      << "  viewlog                - View error log\n"
                       << "  help                   - Show help\n";
         }
     } else {
@@ -864,6 +910,10 @@ void InteractiveShell::start() {
                 handle_adduser(un);
                 break;
             }
+            case CMD_VIEWLOG:
+                handle_viewlog();
+                break;
+            
             case CMD_EXIT:
                 return;
             case CMD_HELP:
