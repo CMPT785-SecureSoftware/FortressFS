@@ -44,14 +44,12 @@ static void initFortress() {
 
         // We call createUser("admin") in unified logic
         if (!UOps::UserOps::createUser("admin")) {
-            Ops::FileOps::appendErrorLog("[Debug] Failed to create admin user!");
             std::cerr << "Failed to create admin user!\n";
             exit(1);
         }
 
         std::string keyfileFrom = PRIVATE_KEYS_DIR + "/admin_keyfile.pem";
         if (!std::filesystem::exists(keyfileFrom)) {
-            Ops::FileOps::appendErrorLog("[Debug] admin_keyfile.pem was not generated in private_keys for some reason.");
             std::cerr << "admin_keyfile.pem was not generated in private_keys for some reason.\n";
             exit(1);
         }

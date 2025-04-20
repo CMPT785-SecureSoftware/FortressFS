@@ -26,11 +26,11 @@ namespace {
     EVP_PKEY* loadPublicKey(const std::string &pubKeyPem) {
         BIO* bio = BIO_new_mem_buf(pubKeyPem.data(), static_cast<int>(pubKeyPem.size()));
         if (!bio)
-            throw std::runtime_error("BIO_new_mem_buf failed for public key: " + getOpenSSLError());
+            throw std::runtime_error("Contact admin user. BIO_new_mem_buf failed for public key: " + getOpenSSLError());
         EVP_PKEY* pkey = PEM_read_bio_PUBKEY(bio, nullptr, nullptr, nullptr);
         BIO_free(bio);
         if (!pkey)
-            throw std::runtime_error("PEM_read_bio_PUBKEY failed: " + getOpenSSLError());
+            throw std::runtime_error("Contact admin user. PEM_read_bio_PUBKEY failed: " + getOpenSSLError());
         return pkey;
     }
 
@@ -38,11 +38,11 @@ namespace {
     EVP_PKEY* loadPrivateKey(const std::string &privKeyPem) {
         BIO* bio = BIO_new_mem_buf(privKeyPem.data(), static_cast<int>(privKeyPem.size()));
         if (!bio)
-            throw std::runtime_error("BIO_new_mem_buf failed for private key: " + getOpenSSLError());
+            throw std::runtime_error("Contact admin user. BIO_new_mem_buf failed for private key: " + getOpenSSLError());
         EVP_PKEY* pkey = PEM_read_bio_PrivateKey(bio, nullptr, nullptr, nullptr);
         BIO_free(bio);
         if (!pkey)
-            throw std::runtime_error("PEM_read_bio_PrivateKey failed: " + getOpenSSLError());
+            throw std::runtime_error("Contact admin user. PEM_read_bio_PrivateKey failed: " + getOpenSSLError());
         return pkey;
     }
 }
@@ -53,22 +53,22 @@ bool SecurityOps::generateRSAKeyPair(const std::string &username)
 {
     EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, nullptr);
     if (!ctx) {
-        std::cerr << "EVP_PKEY_CTX_new_id failed: " << getOpenSSLError() << "\n";
+        std::cerr << "Contact admin user. EVP_PKEY_CTX_new_id failed: " << getOpenSSLError() << "\n";
         return false;
     }
     if (EVP_PKEY_keygen_init(ctx) <= 0) {
-        std::cerr << "EVP_PKEY_keygen_init failed: " << getOpenSSLError() << "\n";
+        std::cerr << "Contact admin user. EVP_PKEY_keygen_init failed: " << getOpenSSLError() << "\n";
         EVP_PKEY_CTX_free(ctx);
         return false;
     }
     if (EVP_PKEY_CTX_set_rsa_keygen_bits(ctx, 2048) <= 0) {
-        std::cerr << "EVP_PKEY_CTX_set_rsa_keygen_bits failed: " << getOpenSSLError() << "\n";
+        std::cerr << "Contact admin user. EVP_PKEY_CTX_set_rsa_keygen_bits failed: " << getOpenSSLError() << "\n";
         EVP_PKEY_CTX_free(ctx);
         return false;
     }
     EVP_PKEY* pkey = nullptr;
     if (EVP_PKEY_keygen(ctx, &pkey) <= 0) {
-        std::cerr << "EVP_PKEY_keygen failed: " << getOpenSSLError() << "\n";
+        std::cerr << "Contact admin user. EVP_PKEY_keygen failed: " << getOpenSSLError() << "\n";
         EVP_PKEY_CTX_free(ctx);
         return false;
     }
@@ -80,14 +80,14 @@ bool SecurityOps::generateRSAKeyPair(const std::string &username)
         BIO* bio = BIO_new_file(privFilename.c_str(), "w");
         if (!bio) {
             EVP_PKEY_free(pkey);
-            std::cerr << "Failed opening private key file for writing: " << getOpenSSLError() << "\n";
+            std::cerr << "Contact admin user. Failed opening private key file for writing: " << getOpenSSLError() << "\n";
             return false;
         }
         if (!PEM_write_bio_PrivateKey(bio, pkey, nullptr, nullptr, 0, nullptr, nullptr)) {
             std::string err = getOpenSSLError();
             BIO_free(bio);
             EVP_PKEY_free(pkey);
-            std::cerr << "PEM_write_bio_PrivateKey failed: " << err << "\n";
+            std::cerr << "Contact admin user. PEM_write_bio_PrivateKey failed: " << err << "\n";
             return false;
         }
         BIO_free(bio);
@@ -99,14 +99,14 @@ bool SecurityOps::generateRSAKeyPair(const std::string &username)
         BIO* bio = BIO_new_file(pubFilename.c_str(), "w");
         if (!bio) {
             EVP_PKEY_free(pkey);
-            std::cerr << "Failed opening public key file for writing: " << getOpenSSLError() << "\n";
+            std::cerr << "Contact admin user. Failed opening public key file for writing: " << getOpenSSLError() << "\n";
             return false;
         }
         if (!PEM_write_bio_PUBKEY(bio, pkey)) {
             std::string err = getOpenSSLError();
             BIO_free(bio);
             EVP_PKEY_free(pkey);
-            std::cerr << "PEM_write_bio_PUBKEY failed: " << err << "\n";
+            std::cerr << "Contact admin user. PEM_write_bio_PUBKEY failed: " << err << "\n";
             return false;
         }
         BIO_free(bio);
@@ -121,17 +121,17 @@ std::string SecurityOps::rsaEncrypt(const std::string &data, const std::string &
     EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new(pkey, nullptr);
     if (!ctx) {
         EVP_PKEY_free(pkey);
-        throw std::runtime_error("EVP_PKEY_CTX_new failed (public key context): " + getOpenSSLError());
+        throw std::runtime_error("Contact admin user. EVP_PKEY_CTX_new failed (public key context): " + getOpenSSLError());
     }
     if (EVP_PKEY_encrypt_init(ctx) <= 0) {
         EVP_PKEY_CTX_free(ctx);
         EVP_PKEY_free(pkey);
-        throw std::runtime_error("EVP_PKEY_encrypt_init failed: " + getOpenSSLError());
+        throw std::runtime_error("Contact admin user. EVP_PKEY_encrypt_init failed: " + getOpenSSLError());
     }
     if (EVP_PKEY_CTX_set_rsa_padding(ctx, RSA_PKCS1_OAEP_PADDING) <= 0) {
         EVP_PKEY_CTX_free(ctx);
         EVP_PKEY_free(pkey);
-        throw std::runtime_error("EVP_PKEY_CTX_set_rsa_padding failed: " + getOpenSSLError());
+        throw std::runtime_error("Contact admin user. EVP_PKEY_CTX_set_rsa_padding failed: " + getOpenSSLError());
     }
     size_t outlen = 0;
     if (EVP_PKEY_encrypt(ctx, nullptr, &outlen,
@@ -139,7 +139,7 @@ std::string SecurityOps::rsaEncrypt(const std::string &data, const std::string &
                          data.size()) <= 0) {
         EVP_PKEY_CTX_free(ctx);
         EVP_PKEY_free(pkey);
-        throw std::runtime_error("EVP_PKEY_encrypt size determination failed: " + getOpenSSLError());
+        throw std::runtime_error("Contact admin user. EVP_PKEY_encrypt size determination failed: " + getOpenSSLError());
     }
     std::vector<unsigned char> outbuf(outlen);
     if (EVP_PKEY_encrypt(ctx, outbuf.data(), &outlen,
@@ -147,7 +147,7 @@ std::string SecurityOps::rsaEncrypt(const std::string &data, const std::string &
                          data.size()) <= 0) {
         EVP_PKEY_CTX_free(ctx);
         EVP_PKEY_free(pkey);
-        throw std::runtime_error("EVP_PKEY_encrypt failed: " + getOpenSSLError());
+        throw std::runtime_error("Contact admin user. EVP_PKEY_encrypt failed: " + getOpenSSLError());
     }
     EVP_PKEY_CTX_free(ctx);
     EVP_PKEY_free(pkey);
@@ -160,17 +160,17 @@ std::string SecurityOps::rsaDecrypt(const std::string &data, const std::string &
     EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new(pkey, nullptr);
     if (!ctx) {
         EVP_PKEY_free(pkey);
-        throw std::runtime_error("EVP_PKEY_CTX_new failed (private key context): " + getOpenSSLError());
+        throw std::runtime_error("Contact admin user. EVP_PKEY_CTX_new failed (private key context): " + getOpenSSLError());
     }
     if (EVP_PKEY_decrypt_init(ctx) <= 0) {
         EVP_PKEY_CTX_free(ctx);
         EVP_PKEY_free(pkey);
-        throw std::runtime_error("EVP_PKEY_decrypt_init failed: " + getOpenSSLError());
+        throw std::runtime_error("Contact admin user. EVP_PKEY_decrypt_init failed: " + getOpenSSLError());
     }
     if (EVP_PKEY_CTX_set_rsa_padding(ctx, RSA_PKCS1_OAEP_PADDING) <= 0) {
         EVP_PKEY_CTX_free(ctx);
         EVP_PKEY_free(pkey);
-        throw std::runtime_error("EVP_PKEY_CTX_set_rsa_padding failed: " + getOpenSSLError());
+        throw std::runtime_error("Contact admin user. EVP_PKEY_CTX_set_rsa_padding failed: " + getOpenSSLError());
     }
     size_t outlen = 0;
     if (EVP_PKEY_decrypt(ctx, nullptr, &outlen,
@@ -178,7 +178,7 @@ std::string SecurityOps::rsaDecrypt(const std::string &data, const std::string &
                          data.size()) <= 0) {
         EVP_PKEY_CTX_free(ctx);
         EVP_PKEY_free(pkey);
-        throw std::runtime_error("EVP_PKEY_decrypt size determination failed: " + getOpenSSLError());
+        throw std::runtime_error("Contact admin user. EVP_PKEY_decrypt size determination failed: " + getOpenSSLError());
     }
     std::vector<unsigned char> outbuf(outlen);
     if (EVP_PKEY_decrypt(ctx, outbuf.data(), &outlen,
@@ -186,7 +186,7 @@ std::string SecurityOps::rsaDecrypt(const std::string &data, const std::string &
                          data.size()) <= 0) {
         EVP_PKEY_CTX_free(ctx);
         EVP_PKEY_free(pkey);
-        throw std::runtime_error("EVP_PKEY_decrypt failed: " + getOpenSSLError());
+        throw std::runtime_error("Contact admin user. EVP_PKEY_decrypt failed: " + getOpenSSLError());
     }
     EVP_PKEY_CTX_free(ctx);
     EVP_PKEY_free(pkey);
@@ -197,26 +197,26 @@ std::string SecurityOps::rsaDecrypt(const std::string &data, const std::string &
 std::string SecurityOps::generateRandomKey(size_t length) {
     std::vector<unsigned char> key(length);
     if (!RAND_bytes(key.data(), length))
-        throw std::runtime_error("Failed to generate random key: " + getOpenSSLError());
+        throw std::runtime_error("Contact admin user. Failed to generate random key: " + getOpenSSLError());
     return std::string(reinterpret_cast<char*>(key.data()), length);
 }
 
 std::string SecurityOps::aesEncrypt(const std::string &plaintext, const std::string &key) {
     if (key.size() != 32)
-        throw std::runtime_error("AES key must be 32 bytes for AES-256. " + getOpenSSLError());
+        throw std::runtime_error("Contact admin user. AES key must be 32 bytes for AES-256. " + getOpenSSLError());
 
     unsigned char iv[16];
     if (!RAND_bytes(iv, sizeof(iv)))
-        throw std::runtime_error("Failed to generate IV: " + getOpenSSLError());
+        throw std::runtime_error("Contact admin user. Failed to generate IV: " + getOpenSSLError());
 
     EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
     if (!ctx)
-        throw std::runtime_error("Failed to create cipher context: " + getOpenSSLError());
+        throw std::runtime_error("Contact admin user. Failed to create cipher context: " + getOpenSSLError());
 
     if (EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), nullptr,
                            reinterpret_cast<const unsigned char*>(key.data()), iv) != 1) {
         EVP_CIPHER_CTX_free(ctx);
-        throw std::runtime_error("EVP_EncryptInit_ex failed: " + getOpenSSLError());
+        throw std::runtime_error("Contact admin user. EVP_EncryptInit_ex failed: " + getOpenSSLError());
     }
     // Explicitly enable PKCS#7 padding.
     EVP_CIPHER_CTX_set_padding(ctx, 1);
@@ -227,12 +227,12 @@ std::string SecurityOps::aesEncrypt(const std::string &plaintext, const std::str
                           reinterpret_cast<const unsigned char*>(plaintext.data()),
                           plaintext.size()) != 1) {
         EVP_CIPHER_CTX_free(ctx);
-        throw std::runtime_error("EVP_EncryptUpdate failed: " + getOpenSSLError());
+        throw std::runtime_error("Contact admin user. EVP_EncryptUpdate failed: " + getOpenSSLError());
     }
     int outLen2 = 0;
     if (EVP_EncryptFinal_ex(ctx, ciphertext.data() + outLen1, &outLen2) != 1) {
         EVP_CIPHER_CTX_free(ctx);
-        throw std::runtime_error("EVP_EncryptFinal_ex failed: " + getOpenSSLError());
+        throw std::runtime_error("Contact admin user. EVP_EncryptFinal_ex failed: " + getOpenSSLError());
     }
     EVP_CIPHER_CTX_free(ctx);
     ciphertext.resize(outLen1 + outLen2);
@@ -246,9 +246,9 @@ std::string SecurityOps::aesEncrypt(const std::string &plaintext, const std::str
 
 std::string SecurityOps::aesDecrypt(const std::string &ciphertext, const std::string &key) {
     if (key.size() != 32)
-        throw std::runtime_error("AES key must be 32 bytes for AES-256. " + getOpenSSLError());
+        throw std::runtime_error("Contact admin user. AES key must be 32 bytes for AES-256. " + getOpenSSLError());
     if (ciphertext.size() < 16)
-        throw std::runtime_error("Ciphertext too short (missing IV). " + getOpenSSLError());
+        throw std::runtime_error("Contact admin user. Ciphertext too short (missing IV). " + getOpenSSLError());
 
     unsigned char iv[16];
     memcpy(iv, ciphertext.data(), 16);
@@ -256,12 +256,12 @@ std::string SecurityOps::aesDecrypt(const std::string &ciphertext, const std::st
 
     EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
     if (!ctx)
-        throw std::runtime_error("Failed to create cipher context: " + getOpenSSLError());
+        throw std::runtime_error("Contact admin user. Failed to create cipher context: " + getOpenSSLError());
 
     if (EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), nullptr,
                            reinterpret_cast<const unsigned char*>(key.data()), iv) != 1) {
         EVP_CIPHER_CTX_free(ctx);
-        throw std::runtime_error("EVP_DecryptInit_ex failed: " + getOpenSSLError());
+        throw std::runtime_error("Contact admin user. EVP_DecryptInit_ex failed: " + getOpenSSLError());
     }
     // Explicitly enable padding.
     EVP_CIPHER_CTX_set_padding(ctx, 1);
@@ -272,12 +272,12 @@ std::string SecurityOps::aesDecrypt(const std::string &ciphertext, const std::st
                           reinterpret_cast<const unsigned char*>(encData.data()),
                           encData.size()) != 1) {
         EVP_CIPHER_CTX_free(ctx);
-        throw std::runtime_error("EVP_DecryptUpdate failed: " + getOpenSSLError());
+        throw std::runtime_error("Contact admin user. EVP_DecryptUpdate failed: " + getOpenSSLError());
     }
     int outLen2 = 0;
     if (EVP_DecryptFinal_ex(ctx, plaintext.data() + outLen1, &outLen2) != 1) {
         EVP_CIPHER_CTX_free(ctx);
-        throw std::runtime_error("EVP_DecryptFinal_ex failed (wrong key or corrupted data): " + getOpenSSLError());
+        throw std::runtime_error("Contact admin user. EVP_DecryptFinal_ex failed (wrong key or corrupted data): " + getOpenSSLError());
     }
     EVP_CIPHER_CTX_free(ctx);
     plaintext.resize(outLen1 + outLen2);
@@ -305,7 +305,7 @@ std::string SecurityOps::hybridEncrypt(const std::string &plaintext, const std::
     // Generate random 32-byte AES key.
     unsigned char aesKey[32];
     if (!RAND_bytes(aesKey, sizeof(aesKey)))
-        throw std::runtime_error("Failed to generate AES key: " + getOpenSSLError());
+        throw std::runtime_error("Contact admin user. Failed to generate AES key: " + getOpenSSLError());
     std::string aesKeyStr(reinterpret_cast<char*>(aesKey), 32);
 
     // Encrypt the plaintext using AES.
@@ -328,7 +328,7 @@ std::string SecurityOps::hybridEncrypt(const std::string &plaintext, const std::
 std::string SecurityOps::hybridDecrypt(const std::string &ciphertext, const std::string &privateKeyPem) {
     // For a 2048-bit RSA key, the RSA-encrypted AES key is 256 bytes.
     if (ciphertext.size() < 256)
-        throw std::runtime_error("Ciphertext too short for hybrid decryption.");
+        throw std::runtime_error("Contact admin user. Ciphertext too short for hybrid decryption.");
 
     std::string encAesKey = ciphertext.substr(0, 256);
     std::string aesCiphertext = ciphertext.substr(256);
@@ -336,7 +336,7 @@ std::string SecurityOps::hybridDecrypt(const std::string &ciphertext, const std:
     // RSA-decrypt the AES key.
     std::string aesKeyStr = rsaDecrypt(encAesKey, privateKeyPem);
     if (aesKeyStr.size() != 32)
-        throw std::runtime_error("Recovered AES key size is incorrect.");
+        throw std::runtime_error("Contact admin user. Recovered AES key size is incorrect.");
 
     // Decrypt the AES ciphertext.
     return aesDecrypt(aesCiphertext, aesKeyStr);
