@@ -36,7 +36,9 @@ bool UserOps::createUserFileMapping(const std::string &username, const std::stri
     mapping["root"]     = SecOps::SecurityOps::sha256(username);
     mapping["personal"] = SecOps::SecurityOps::sha256("personal");
     mapping["entries"]  = json::object();  // To track subfolders/files in personal
-
+    //Store public key fingerprint for later verification
+    mapping["public_key"] = SecOps::SecurityOps::sha256(userPub);
+    
     std::string fileNameHash = SecOps::SecurityOps::sha256("user_file_mapping.json");
     std::string filePath = userRoot + "/" + fileNameHash;
     std::string plain = mapping.dump(4);
@@ -252,6 +254,11 @@ std::string UserOps::login(const std::string &keyfilePath) {
     pubBuf << pubF.rdbuf();
     std::string userPub = pubBuf.str();
     pubF.close();
+    // Check if the public key fingerprint matches the one in the mapping.
+    if (!mapping.contains("public_key") || mapping["public_key"] != SecOps::SecurityOps::sha256(userPub)) {
+        Ops::FileOps::appendErrorLog("[Debug] login: public key mismatch for " + uname);
+        return "";
+    }
     bool adminFlag = (uname == "admin");
     users[uname] = User{uname, keyData, userPub, adminFlag};
     return uname;
