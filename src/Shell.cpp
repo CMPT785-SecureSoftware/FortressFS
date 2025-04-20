@@ -848,7 +848,17 @@ void InteractiveShell::start() {
         {"exit", CMD_EXIT}, {"help", CMD_HELP}
     };
     while (true) {
-        std::cout << "[" << currentUser << " @filesystem:" << currentDir << "]$ ";
+        if (currentUser == "admin" && isAdminFSMode) {
+            std::cout << "[admin @filesystem]$ ";
+        } else if (currentUser == "admin" && !viewedUser.empty()) {
+            std::cout << "[" << currentUser << " @/" << viewedUser << "]$ ";
+        } else if (currentUser != "admin") {
+            std::cout << "[" << currentUser << " @" << currentDir << "]$ ";
+        }
+        else {
+            std::cout << "[" << currentUser << " @/" << currentDir << "]$ ";
+        }
+        // std::cout << "[" << currentUser << " @filesystem:" << currentDir << "]$ ";
         std::string line;
         if (!std::getline(std::cin, line)) break;
         if (line.empty()) continue;
