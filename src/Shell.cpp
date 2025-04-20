@@ -908,7 +908,6 @@ void InteractiveShell::start() {
             case CMD_VIEWLOG:
                 handle_viewlog();
                 break;
-            
             case CMD_EXIT:
                 return;
             case CMD_HELP:
