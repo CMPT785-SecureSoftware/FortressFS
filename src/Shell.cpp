@@ -758,12 +758,7 @@ void InteractiveShell::handle_viewlog() {
             decData = SecOps::SecurityOps::aesDecrypt(encData, keyStr);
             std::cout << "Error Log:\n" << decData << "\n";
         } catch (...) {
-            if (currentUser == "admin") {
-                std::cerr << "[Debug] appendErrorLog: global_mapping_key not found in user_file_mapping.json for " + user.username;
-            }
-            else {
-                std::cerr << "[Debug] Please contact the admin to resolve this issue.\n";
-            }
+            std::cerr << "[Debug] appendErrorLog: global_mapping_key not found in user_file_mapping.json for admin";
             return;
         }
     }
