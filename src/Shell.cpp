@@ -92,7 +92,8 @@ std::string InteractiveShell::resolvePath(const std::string &vpath) {
         
         json global = UOps::UserOps::loadGlobalMapping(UOps::UserOps::getUser(activeUser));
         if (global.empty()) {
-            Ops::FileOps::appendErrorLog("[Debug] resolvePath: loadGlobalMapping failed for " + activeUser);
+            Ops::FileOps::appendErrorLog("[Debug] resolvePath: loadGlobalMapping failed for " + activeUser,
+                                          UOps::UserOps::getUser(activeUser));
             return "";
         }
         std::string sharedHash;
@@ -364,7 +365,8 @@ void InteractiveShell::handle_ls() {
     if (isInSharedDirectory(currentDir)) {
         json global = UOps::UserOps::loadGlobalMapping(UOps::UserOps::getUser(activeUser));
         if (global.empty()) {
-            Ops::FileOps::appendErrorLog("[Debug] handle_ls: global_mapping.json is empty");
+            Ops::FileOps::appendErrorLog("[Debug] handle_ls: global_mapping.json is empty",
+                                          UOps::UserOps::getUser(activeUser));
             return;
         }
         // Check if the user has shared files and it is not empty.
@@ -381,10 +383,8 @@ void InteractiveShell::handle_ls() {
     if (isInPersonalDirectory(currentDir)) {
         json filemap = UOps::UserOps::loadUserFileMappingPublic(activeUser, UOps::UserOps::getUser(activeUser).privateKey);
         if (filemap.empty() || !filemap.contains("entries")) {
-
             Ops::FileOps::appendErrorLog("[Debug] handle_ls: user_file_mapping.json is empty or missing 'entries' for " + activeUser,
-                UOps::UserOps::getUser(activeUser));
-
+                                          UOps::UserOps::getUser(activeUser));
             return;
         }
         for (auto &item : filemap["entries"].items()) {
@@ -422,7 +422,8 @@ void InteractiveShell::handle_cat(const std::string &filename) {
     if (isInSharedDirectory(currentDir)) {
         json global = UOps::UserOps::loadGlobalMapping(UOps::UserOps::getUser(activeUser));
         if (global.empty()) {
-            Ops::FileOps::appendErrorLog("[Debug] handle_cat: global_mapping.json is empty");
+            Ops::FileOps::appendErrorLog("[Debug] handle_cat: global_mapping.json is empty",
+                                          UOps::UserOps::getUser(activeUser));
             return;
         }
         // Check if the file exists in the shared_files mapping.
@@ -480,23 +481,26 @@ void InteractiveShell::handle_cat(const std::string &filename) {
  * 4. Write the resulting ciphertext into the target user's shared folder.
  * 5. Update global_mapping.json with the shared file entry.
  */
-void InteractiveShell::handle_share(const std::string &args) {
+void InteractiveShell::handle_share(const std::string &args, bool silent/* = false*/) {
     std::istringstream iss(args);
     std::string filename, targetUser;
     iss >> filename >> targetUser;
     if (filename.empty() || targetUser.empty()) {
-        std::cout << "Usage: share <filename> <targetUser>\n";
+        if (!silent)
+            std::cout << "Usage: share <filename> <targetUser>\n";
         return;
     }
     if (!isInPersonalDirectory(currentDir)) {
-        std::cout << "Share command allowed only in personal directory.\n";
+        if (!silent)
+            std::cout << "Access denied: share is allowed only in personal directory.\n";
         return;
     }
     std::string hashed = SecOps::SecurityOps::sha256(filename);
     std::string realDir = resolvePath(currentDir);
     std::string realFile = realDir + "/" + hashed;
     if (!Ops::FileOps::fileExists(realFile)) {
-        std::cout << "File " << filename << " doesn't exist\n";
+        if (!silent)
+            std::cout << "File " << filename << " doesn't exist\n";
         return;
     }
     // First, decrypt the file using the source user's private key.
@@ -506,14 +510,16 @@ void InteractiveShell::handle_share(const std::string &args) {
     try {
         plaintext = SecOps::SecurityOps::hybridDecrypt(Ops::FileOps::readFile(realFile), sourcePriv);
     } catch(std::exception &e) {
-        std::cout << "Error decrypting file for sharing.\n";
+        if (!silent)
+            std::cout << "Error decrypting file for sharing.\n";
         return;
     }
     // Obtain the target user's public key from PUBLIC_KEYS_DIR.
     std::string targetPubFile = "public_keys/" + targetUser + "_public.pem";
     std::ifstream targetPubStream(targetPubFile);
     if (!targetPubStream) {
-        std::cout << "Target user public key not found.\n";
+        if (!silent)
+            std::cout << "Target user public key file not found.\n";
         return;
     }
     std::stringstream targetPubBuf;
@@ -525,20 +531,23 @@ void InteractiveShell::handle_share(const std::string &args) {
     try {
         newCipher = SecOps::SecurityOps::hybridEncrypt(plaintext, targetPub);
     } catch(std::exception &e) {
-        std::cout << "Error encrypting file for target user.\n";
+        if (!silent)
+            std::cout << "Error encrypting file for target user.\n";
         return;
     }
     // Update global mapping: add the shared file entry.
     json global = UOps::UserOps::loadGlobalMapping(UOps::UserOps::getUser(activeUser));
     if (global.empty()) {
-        Ops::FileOps::appendErrorLog("[Debug] handle_share: global_mapping.json is empty");
+        Ops::FileOps::appendErrorLog("[Debug] handle_share: global_mapping.json is empty",
+                                      UOps::UserOps::getUser(activeUser));
         return;
     }
     std::string hashedName = SecOps::SecurityOps::sha256(filename);
     global[targetUser]["shared_files"][hashedName] = filename;
     // Save the updated global mapping.
     if (!UOps::UserOps::saveGlobalMap(global, UOps::UserOps::getUser(activeUser))) {
-        Ops::FileOps::appendErrorLog("[Debug] handle_share: failed to save global mapping");
+        Ops::FileOps::appendErrorLog("[Debug] handle_share: failed to save global mapping",
+                                      UOps::UserOps::getUser(activeUser));
     }
     // Write the new ciphertext to the target user's shared folder.
     std::string targetSharedHash;
@@ -552,7 +561,8 @@ void InteractiveShell::handle_share(const std::string &args) {
     }
     std::string targetFile = targetDir + "/" + hashedName;
     Ops::FileOps::writeFile(targetFile, newCipher);
-    std::cout << "Shared file with " << targetUser << " at /shared/" << filename << "\n";
+    if (!silent)
+        std::cout << "Shared file " << filename << " with " << targetUser << "\n";
 }
 
 /**
@@ -599,7 +609,6 @@ void InteractiveShell::handle_mkdir(const std::string &dirname) {
     // Add the new directory to the mapping.
     mapping["entries"][hashed] = { {"name", dirname}, {"type", "d"} , {"parent", parentDir} };
     // Save the updated mapping.
-
     if (!UOps::UserOps::saveUserFileMappingPublic(activeUser, UOps::UserOps::getUser(activeUser).publicKey, mapping)) {
         std::cout << "Warning: Failed to update directory mapping.\n";
     }
@@ -663,7 +672,27 @@ void InteractiveShell::handle_mkfile(const std::string &args) {
     if (!UOps::UserOps::saveUserFileMappingPublic(activeUser, UOps::UserOps::getUser(activeUser).publicKey, mapping)) {
         std::cout << "Warning: Failed to update file mapping.\n";
     }
+    // Re-share the file if it was already shared.
+    // Load the global mapping for this user.
+    json global = UOps::UserOps::loadGlobalMapping(UOps::UserOps::getUser(activeUser));
+    if (global.empty()) {
+        Ops::FileOps::appendErrorLog("[Debug] handle_mkfile: global_mapping.json is empty",
+                                      UOps::UserOps::getUser(activeUser));
+        return;
+    }
+    // Iterate over every user entry in the mapping
+    for (auto &userEntry : global.items()) {
+        const std::string &otherUser = userEntry.key();
+        if (otherUser == activeUser) continue;
+        auto &info = userEntry.value();
+        // If they had this file shared
+        if (info.contains("shared_files") && info["shared_files"].contains(hashed)) {
+            // Re-run share command for this recipient
+            handle_share(filename + " " + otherUser, /*silent=*/true);
+        }
+    }
 }
+
 
 /**
  * handle_adduser:
@@ -813,7 +842,7 @@ void InteractiveShell::start() {
                 std::string rest;
                 std::getline(iss, rest);
                 if (!rest.empty() && rest[0]==' ') rest.erase(rest.begin());
-                handle_share(rest);
+                handle_share(rest, /*silent=*/false);
                 break;
             }
             case CMD_MKDIR: {

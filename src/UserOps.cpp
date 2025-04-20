@@ -5,6 +5,7 @@
 #include <sstream>
 #include <iostream>
 #include <filesystem>
+#include <vector>
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
@@ -35,8 +36,10 @@ static const std::string ADMIN_KEYS_DIR   = "admin_keys"; // For admin's final p
     }
     return oss.str();
 }
- // Helper function to convert hex to bytes string
- static std::vector<unsigned char> hexToBytes(const std::string &hex) {
+
+
+// Helper function to convert hex to bytes string
+std::vector<unsigned char> UserOps::hexToBytes(const std::string &hex) {
     if (hex.size() % 2) throw std::runtime_error("Invalid hex length");
     std::vector<unsigned char> out; out.reserve(hex.size()/2);
     for (size_t i = 0; i < hex.size(); i += 2) {
@@ -49,12 +52,10 @@ static const std::string ADMIN_KEYS_DIR   = "admin_keys"; // For admin's final p
     return out;
 }
 
-
-
 bool UserOps::createUserFileMapping(const std::string &username, const std::string &userPub) {
     std::string userRoot = "filesystem/" + SecOps::SecurityOps::sha256(username);
     if (!std::filesystem::exists(userRoot)) {
-        Ops::FileOps::appendErrorLog("[Debug] createUserFileMapping: user root doesn't exist for " + username);
+        std::cerr << "[Debug] createUserFileMapping: user root does not exist " + userRoot << std::endl;
         return false;
     }
     json mapping;
@@ -86,11 +87,11 @@ bool UserOps::createUserFileMapping(const std::string &username, const std::stri
         // Use hybrid encryption: encrypt plain using a random AES key and RSA encrypt that AES key.
         encrypted = SecOps::SecurityOps::hybridEncrypt(plain, userPub);
     } catch(std::exception &e) {
-        Ops::FileOps::appendErrorLog("[Debug] createUserFileMapping: hybridEncrypt failed: " + std::string(e.what()));
+        std::cerr << "[Debug] createUserFileMapping: hybridEncrypt failed: " + std::string(e.what()) << std::endl;
         return false;
     }
     if (!Ops::FileOps::writeFile(filePath, encrypted)) {
-        Ops::FileOps::appendErrorLog("[Debug] createUserFileMapping: writeFile failed for " + filePath);
+        std::cerr << "[Debug] createUserFileMapping: writeFile failed for " + filePath << std::endl;
         return false;
     }
     return true;
@@ -110,26 +111,26 @@ json UserOps::loadUserFileMappingPublic(const std::string &username, const std::
     std::string fileNameHash = SecOps::SecurityOps::sha256("user_file_mapping.json");
     std::string filePath = userRoot + "/" + fileNameHash;
     if (!Ops::FileOps::fileExists(filePath)) {
-        Ops::FileOps::appendErrorLog("[Debug] loadUserFileMappingPublic: file does not exist " + filePath);
+        std::cerr << "[Debug] loadUserFileMappingPublic: file does not exist " + filePath << std::endl;
         return empty;
     }
     std::string encData = Ops::FileOps::readFile(filePath);
     if (encData.empty()) {
-        Ops::FileOps::appendErrorLog("[Debug] loadUserFileMappingPublic: empty file " + filePath);
+        std::cerr << "[Debug] loadUserFileMappingPublic: readFile failed for " + filePath << std::endl;
         return empty;
     }
     std::string decrypted;
     try {
         decrypted = SecOps::SecurityOps::hybridDecrypt(encData, userPriv);
     } catch(std::exception &e) {
-        Ops::FileOps::appendErrorLog("[Debug] loadUserFileMappingPublic: hybridDecrypt failed: " + std::string(e.what()));
+        std::cerr << "[Debug] loadUserFileMappingPublic: hybridDecrypt failed: " + std::string(e.what()) << std::endl;
         return empty;
     }
     json j;
     try {
         j = json::parse(decrypted);
     } catch(...) {
-        Ops::FileOps::appendErrorLog("[Debug] loadUserFileMappingPublic: JSON parse error for " + filePath);
+        std::cerr << "[Debug] loadUserFileMappingPublic: json parse failed" << std::endl;
         return empty;
     }
     return j;
@@ -149,11 +150,13 @@ bool UserOps::saveUserFileMappingPublic(const std::string &username, const std::
     try {
         encrypted = SecOps::SecurityOps::hybridEncrypt(plain, userPub);
     } catch(std::exception &e) {
-        Ops::FileOps::appendErrorLog("[Debug] saveUserFileMappingPublic: hybridEncrypt failed: " + std::string(e.what()));
+        Ops::FileOps::appendErrorLog("[Debug] saveUserFileMappingPublic: hybridEncrypt failed: " + std::string(e.what()),
+                                      UOps::UserOps::getUser(username));
         return false;
     }
     if (!Ops::FileOps::writeFile(filePath, encrypted)) {
-        Ops::FileOps::appendErrorLog("[Debug] saveUserFileMappingPublic: writeFile failed for " + filePath);
+        Ops::FileOps::appendErrorLog("[Debug] saveUserFileMappingPublic: writeFile failed for " + filePath,
+                                      UOps::UserOps::getUser(username));
         return false;
     }
     return true;
@@ -171,18 +174,33 @@ bool UserOps::saveUserFileMappingPublic(const std::string &username, const std::
 bool UserOps::createUser(const std::string &username) {
     for (char c : username) {
         if (!std::isalnum(c) && c != '-') {
-            Ops::FileOps::appendErrorLog("[Debug] Invalid username: " + username);
+            if (username == "admin") {
+                std::cerr << "[Debug] createUser: Invalid username: " + username << std::endl;
+            } else {
+                Ops::FileOps::appendErrorLog("[Debug] Invalid username: " + username,
+                                              UOps::UserOps::getUser("admin"));
+            }
             return false;
         }
     }
     if (!SecOps::SecurityOps::generateRSAKeyPair(username)) {
-        Ops::FileOps::appendErrorLog("[Debug] Failed generating key pair for " + username);
+        if (username == "admin") {
+            std::cerr << "[Debug] createUser: Failed to generate RSA key pair for " + username << std::endl;
+        } else {
+            Ops::FileOps::appendErrorLog("[Debug] Failed to generate RSA key pair for " + username,
+                                          UOps::UserOps::getUser("admin"));
+        }
         return false;
     }
     // Read keyfiles.
     std::ifstream privFile(username + "_keyfile.pem");
     if (!privFile) {
-        Ops::FileOps::appendErrorLog("[Debug] Failed opening " + username + "_keyfile.pem");
+        if (username == "admin") {
+            std::cerr << "[Debug] createUser: Failed opening " + username + "_keyfile.pem" << std::endl;
+        } else {
+            Ops::FileOps::appendErrorLog("[Debug] Failed opening " + username + "_keyfile.pem",
+                                          UOps::UserOps::getUser("admin"));
+        }
         return false;
     }
     std::stringstream privBuf;
@@ -191,7 +209,12 @@ bool UserOps::createUser(const std::string &username) {
     privFile.close();
     std::ifstream pubFile(username + "_public.pem");
     if (!pubFile) {
-        Ops::FileOps::appendErrorLog("[Debug] Failed opening " + username + "_public.pem");
+        if (username == "admin") {
+            std::cerr << "[Debug] createUser: Failed opening " + username + "_public.pem" << std::endl;
+        } else {
+            Ops::FileOps::appendErrorLog("[Debug] Failed opening " + username + "_public.pem",
+                                          UOps::UserOps::getUser("admin"));
+        }
         return false;
     }
     std::stringstream pubBuf;
@@ -202,7 +225,12 @@ bool UserOps::createUser(const std::string &username) {
     std::filesystem::create_directories(PRIVATE_KEYS_DIR);
     std::string keyfilePath = PRIVATE_KEYS_DIR + "/" + username + "_keyfile.pem";
     if (!Ops::FileOps::writeFile(keyfilePath, userPriv)) {
-        Ops::FileOps::appendErrorLog("[Debug] Could not write " + keyfilePath);
+        if (username == "admin") {
+            std::cerr << "[Debug] createUser: Failed to write " + keyfilePath << std::endl;
+        } else {
+            Ops::FileOps::appendErrorLog("[Debug] Failed to write " + keyfilePath,
+                                          UOps::UserOps::getUser("admin"));
+        }
         return false;
     }
     std::filesystem::create_directories(PUBLIC_KEYS_DIR);
@@ -218,14 +246,25 @@ bool UserOps::createUser(const std::string &username) {
     std::filesystem::create_directories(sharedDir);
     // Create the encrypted user_file_mapping.
     if (!createUserFileMapping(username, userPub)) {
-        Ops::FileOps::appendErrorLog("[Debug] createUser: createUserFileMapping failed for " + username);
+        if (username == "admin") {
+            std::cerr << "[Debug] createUser: Failed to create user_file_mapping for " + username << std::endl;
+        } else {
+            Ops::FileOps::appendErrorLog("[Debug] Failed to create user_file_mapping for " + username,
+                                          UOps::UserOps::getUser("admin"));
+        }
         return false;
     }
     
     bool adminFlag = (username == "admin");
     if (adminFlag) {
         if (!UOps::UserOps::updateAdminMapping(username, userPriv, userPub)) {
-            Ops::FileOps::appendErrorLog("[Debug] Failed to update admin mapping for " + username);
+            if (username == "admin") {
+                std::cerr << "[Debug] createUser: Failed to update admin mapping for " + username << std::endl;
+            } else {
+                Ops::FileOps::appendErrorLog("[Debug] Failed to update admin mapping for " + username,
+                                              UOps::UserOps::getUser("admin"));
+            }
+            return false;
         }
     }
     users[username] = User{username, userPriv, userPub, adminFlag};
@@ -233,7 +272,12 @@ bool UserOps::createUser(const std::string &username) {
     // Update global mapping with emmpty json variable and users
     json globalMapping = json::object();
     if(!UOps::UserOps::saveGlobalMap(globalMapping, users[username])){
-        Ops::FileOps::appendErrorLog("[Debug] Failed to save global mapping for " + username);
+        if (username == "admin") {
+            std::cerr << "[Debug] createUser: Failed to save global mapping for " + username << std::endl;
+        } else {
+            Ops::FileOps::appendErrorLog("[Debug] Failed to save global mapping for " + username,
+                                          UOps::UserOps::getUser("admin"));
+        }
         return false;
     }
 
@@ -253,44 +297,44 @@ bool UserOps::createUser(const std::string &username) {
 std::string UserOps::login(const std::string &keyfilePath) {
     std::ifstream ifs(keyfilePath, std::ios::binary);
     if (!ifs) {
-        Ops::FileOps::appendErrorLog("[Debug] Unable to open keyfile: " + keyfilePath);
+        std::cerr << "[Debug] login: cannot open keyfile " << keyfilePath << std::endl;
         return "";
     }
     std::string keyData((std::istreambuf_iterator<char>(ifs)),
                         std::istreambuf_iterator<char>());
     ifs.close();
     if (keyData.empty()) {
-        Ops::FileOps::appendErrorLog("[Debug] Keyfile is empty: " + keyfilePath);
+        std::cerr << "[Debug] login: keyfile is empty " << keyfilePath << std::endl;
         return "";
     }
     std::filesystem::path p(keyfilePath);
     std::string baseKeyfile = p.filename().string();
     size_t pos = baseKeyfile.find("_keyfile.pem");
     if (pos == std::string::npos) {
-        Ops::FileOps::appendErrorLog("[Debug] Keyfile name not in <username>_keyfile.pem format: " + baseKeyfile);
+        std::cerr << "[Debug] login: invalid keyfile name " << baseKeyfile << std::endl;
         return "";
     }
     std::string uname = baseKeyfile.substr(0, pos);
     std::string userRoot = "filesystem/" + SecOps::SecurityOps::sha256(uname);
     if (!std::filesystem::exists(userRoot)) {
-        Ops::FileOps::appendErrorLog("[Debug] login: user root not found for " + uname);
+        std::cerr << "[Debug] login: user root does not exist for " << uname << std::endl;
         return "";
     }
     // Load the user_file_mapping using hybrid decryption.
     json mapping = loadUserFileMappingPublic(uname, keyData);
     if (mapping.empty()) {
-        Ops::FileOps::appendErrorLog("[Debug] login: user_file_mapping is empty for " + uname);
+        std::cerr << "[Debug] login: user_file_mapping is empty for " << uname << std::endl;
         return "";
     }
     if (!mapping.contains("username") || mapping["username"] != uname) {
-        Ops::FileOps::appendErrorLog("[Debug] login: mismatch in user_file_mapping for " + uname);
+        std::cerr << "[Debug] login: username mismatch in mapping for " << uname << std::endl;
         return "";
     }
     // Read the user's public key.
     std::string pubFilePath = PUBLIC_KEYS_DIR + "/" + uname + "_public.pem";
     std::ifstream pubF(pubFilePath);
     if (!pubF) {
-        Ops::FileOps::appendErrorLog("[Debug] login: cannot open public key for " + uname);
+        std::cerr << "[Debug] login: cannot open public key file " << pubFilePath << std::endl;
         return "";
     }
     std::stringstream pubBuf;
@@ -299,7 +343,7 @@ std::string UserOps::login(const std::string &keyfilePath) {
     pubF.close();
     // Check if the public key fingerprint matches the one in the mapping.
     if (!mapping.contains("public_key") || mapping["public_key"] != SecOps::SecurityOps::sha256(userPub)) {
-        Ops::FileOps::appendErrorLog("[Debug] login: public key mismatch for " + uname);
+        std::cerr << "[Debug] login: public key mismatch for " << uname << std::endl;
         return "";
     }
     bool adminFlag = (uname == "admin");
@@ -324,7 +368,6 @@ std::string UserOps::login(const std::string &keyfilePath) {
             users[user.key()] = User{user.key(), user.value(), "", false};
         }
     }
-
     return uname;
 }
 
@@ -362,17 +405,19 @@ json UserOps::loadGlobalMapping(const UOps::User &user) {
     // Get the global mapping key from the user_file_mapping.json
     json userFileMapping = loadUserFileMappingPublic(user.username, user.privateKey);
     if (userFileMapping.empty() || !userFileMapping.contains("global_mapping_key")) {
-        Ops::FileOps::appendErrorLog("[Debug] saveGlobalMap: global_mapping_key not found in user_file_mapping.json for " + user.username);
+        Ops::FileOps::appendErrorLog("[Debug] saveGlobalMap: global_mapping_key not found in user_file_mapping.json for " + user.username,
+                                      UOps::UserOps::getUser(user.username));
         // return empty json object
         return globalMapping;
     }
     std::string globalMappingKey = userFileMapping["global_mapping_key"];
-    auto keyBytes = hexToBytes(globalMappingKey);
+    auto keyBytes = UserOps::hexToBytes(globalMappingKey);
     std::string keyStr(reinterpret_cast<char*>(keyBytes.data()), keyBytes.size());
     // Read the global mapping file.
     // If the file does not exist, create an empty JSON object.
     if (!Ops::FileOps::fileExists(globalMappingPath)) {
-        Ops::FileOps::appendErrorLog("[Debug] loadGlobalMapping: global_mapping.json not found");
+        Ops::FileOps::appendErrorLog("[Debug] loadGlobalMapping: global_mapping.json not found",
+                                      UOps::UserOps::getUser(user.username));
         
     } else {
         std::string enc = Ops::FileOps::readFile(globalMappingPath);
@@ -382,7 +427,8 @@ json UserOps::loadGlobalMapping(const UOps::User &user) {
             globalMapping = json::parse(dec);
             return globalMapping;
         } catch (...) {
-            Ops::FileOps::appendErrorLog("[Debug] loadGlobalMapping: aesDecrypt failed for " + globalMappingPath);
+            Ops::FileOps::appendErrorLog("[Debug] loadGlobalMapping: aesDecrypt failed for " + globalMappingPath,
+                                          UOps::UserOps::getUser(user.username));
             return globalMapping;
         }
     }
@@ -391,7 +437,8 @@ json UserOps::loadGlobalMapping(const UOps::User &user) {
 bool UserOps::saveGlobalMap(const json &j, const UOps::User &user) {
     json globalMapping = loadGlobalMapping(user);
     if (globalMapping.empty()) {
-        Ops::FileOps::appendErrorLog("[Debug] saveGlobalMap: loadGlobalMapping failed for " + user.username);
+        Ops::FileOps::appendErrorLog("[Debug] saveGlobalMap: loadGlobalMapping failed for " + user.username,
+                                      UOps::UserOps::getUser(user.username));
     }
     // If the user does not exist in the global mapping, add it.
     if (!globalMapping.contains(user.username)) {
@@ -412,23 +459,26 @@ bool UserOps::saveGlobalMap(const json &j, const UOps::User &user) {
     // Get the global mapping key from the user_file_mapping.json
     json userFileMapping = loadUserFileMappingPublic(user.username, user.privateKey);
     if (userFileMapping.empty() || !userFileMapping.contains("global_mapping_key")) {
-        Ops::FileOps::appendErrorLog("[Debug] saveGlobalMap: global_mapping_key not found in user_file_mapping.json for " + user.username);
+        Ops::FileOps::appendErrorLog("[Debug] saveGlobalMap: global_mapping_key not found in user_file_mapping.json for " + user.username,
+                                      UOps::UserOps::getUser(user.username));
         // return empty json object
         return globalMapping;
     }
     std::string globalMappingKey = userFileMapping["global_mapping_key"];
-    auto keyBytes = hexToBytes(globalMappingKey);
+    auto keyBytes = UserOps::hexToBytes(globalMappingKey);
     std::string keyStr(reinterpret_cast<char*>(keyBytes.data()), keyBytes.size());
     // Read the global mapping file.
     try {
         // Encrypt the global mapping file using the global mapping key.
         encrypted = SecOps::SecurityOps::aesEncrypt(plain, keyStr);
     } catch(std::exception &e) {
-        Ops::FileOps::appendErrorLog("[Debug] saveGlobalMap: aesEncrypt failed: " + std::string(e.what()));
+        Ops::FileOps::appendErrorLog("[Debug] saveGlobalMap: aesEncrypt failed: " + std::string(e.what()),
+                                      UOps::UserOps::getUser(user.username));
         return false;
     }
     if (!Ops::FileOps::writeFile(globalMappingPath, encrypted)) {
-        Ops::FileOps::appendErrorLog("[Debug] saveGlobalMap: writeFile failed for " + globalMappingPath);
+        Ops::FileOps::appendErrorLog("[Debug] saveGlobalMap: writeFile failed for " + globalMappingPath,
+                                      UOps::UserOps::getUser(user.username));
         return false;
     }
     return true;
@@ -463,7 +513,8 @@ bool UserOps::updateAdminMapping(const std::string &username, const std::string 
     // Read admin's public key from file.
     std::ifstream adminPubStream("public_keys/admin_public.pem");
     if (!adminPubStream) {
-        Ops::FileOps::appendErrorLog("[Debug] updateAdminMapping: failed to open admin public key file");
+        Ops::FileOps::appendErrorLog("[Debug] updateAdminMapping: failed to open admin public key file",
+                                      UOps::UserOps::getUser("admin"));
         return false;
     }
     std::stringstream adminPubBuf;
@@ -476,12 +527,15 @@ bool UserOps::updateAdminMapping(const std::string &username, const std::string 
     try {
         encrypted = SecOps::SecurityOps::hybridEncrypt(plain, adminPub);
     } catch(std::exception &e) {
-        Ops::FileOps::appendErrorLog("[Debug] updateAdminMapping: hybridEncrypt failed: " + std::string(e.what()));
+        Ops::FileOps::appendErrorLog("[Debug] updateAdminMapping: hybridEncrypt failed: " + std::string(e.what()),
+                                      UOps::UserOps::getUser("admin"));
         return false;
     }
     bool success = Ops::FileOps::writeFile(adminMappingPath, encrypted);
     if (!success) {
-        Ops::FileOps::appendErrorLog("[Debug] updateAdminMapping: writeFile failed for " + adminMappingPath);
+        Ops::FileOps::appendErrorLog("[Debug] updateAdminMapping: writeFile failed for " + adminMappingPath,
+                                      UOps::UserOps::getUser("admin"));
+        return false;
     }
     return success;
 }

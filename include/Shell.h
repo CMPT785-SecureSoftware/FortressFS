@@ -35,7 +35,7 @@ namespace Shell {
         void handle_pwd();
         void handle_ls();
         void handle_cat(const std::string &filename);
-        void handle_share(const std::string &args);
+        void handle_share(const std::string &args, bool silent);
         void handle_mkdir(const std::string &dirname);
         void handle_mkfile(const std::string &args);
         void handle_adduser(const std::string &username);
