@@ -52,12 +52,12 @@ void FileOps::appendErrorLog(const std::string &message, const UOps::User &user)
     // Get the global mapping key from the user_file_mapping.json
     json userFileMapping = UOps::UserOps::loadUserFileMappingPublic(user.username, user.privateKey);
     if (userFileMapping.empty() || !userFileMapping.contains("global_mapping_key")) {
-        if (user.username == "admin") {
-            std::cerr << "[Debug] appendErrorLog: global_mapping_key not found in user_file_mapping.json for " + user.username;
-        }
-        else {
-            std::cerr << "[Debug] Please contact the admin to resolve this issue.\n";
-        }
+        // if (user.username == "admin") {
+        //     std::cerr << "[Debug] appendErrorLog: global_mapping_key not found in user_file_mapping.json for " + user.username;
+        // }
+        // else {
+        //     std::cerr << "[Debug] Please contact the admin to resolve this issue.\n";
+        // }
         return;
     }
     std::string globalMappingKey = userFileMapping["global_mapping_key"];
@@ -76,12 +76,12 @@ void FileOps::appendErrorLog(const std::string &message, const UOps::User &user)
             // Decrypt the error.log file using the global mapping key.
             decData = SecOps::SecurityOps::aesDecrypt(encData, keyStr);
         } catch (...) {
-            if (user.username == "admin") {
-                std::cerr << "[Debug] appendErrorLog: global_mapping_key not found in user_file_mapping.json for " + user.username;
-            }
-            else {
-                std::cerr << "[Debug] Please contact the admin to resolve this issue.\n";
-            }
+            // if (user.username == "admin") {
+            //     std::cerr << "[Debug] appendErrorLog: global_mapping_key not found in user_file_mapping.json for " + user.username;
+            // }
+            // else {
+            //     std::cerr << "[Debug] Please contact the admin to resolve this issue.\n";
+            // }
             return;
         }
     }

@@ -738,7 +738,7 @@ void InteractiveShell::handle_viewlog() {
     // Get the global mapping key from the user_file_mapping.json
     json userFileMapping = UOps::UserOps::loadUserFileMappingPublic(currentUser, UOps::UserOps::getUser("admin").privateKey);
     if (userFileMapping.empty() || !userFileMapping.contains("global_mapping_key")) {
-        std::cerr << "[Debug] appendErrorLog: global_mapping_key not found in user_file_mapping.json for admin 456\n";
+        std::cerr << "[Debug] appendErrorLog: global_mapping_key not found in user_file_mapping.json for admin\n";
         return;
     }
     std::string globalMappingKey = userFileMapping["global_mapping_key"];
@@ -758,7 +758,7 @@ void InteractiveShell::handle_viewlog() {
             decData = SecOps::SecurityOps::aesDecrypt(encData, keyStr);
             std::cout << "Error Log:\n" << decData << "\n";
         } catch (...) {
-            std::cerr << "[Debug] appendErrorLog: global_mapping_key not found in user_file_mapping.json for admin 123";
+            std::cerr << "[Debug] appendErrorLog: global_mapping_key not found in user_file_mapping.json for admin";
             return;
         }
     }
@@ -905,11 +905,9 @@ void InteractiveShell::start() {
                 handle_adduser(un);
                 break;
             }
-            case CMD_VIEWLOG:{
-                std::cout << "Admin only command: viewlog\n";
+            case CMD_VIEWLOG:
                 handle_viewlog();
                 break;
-            }    
             case CMD_EXIT:
                 return;
             case CMD_HELP:
