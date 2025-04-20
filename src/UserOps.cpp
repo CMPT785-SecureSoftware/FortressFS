@@ -324,6 +324,7 @@ std::string UserOps::login(const std::string &keyfilePath) {
             users[user.key()] = User{user.key(), user.value(), "", false};
         }
     }
+
     return uname;
 }
 

@@ -381,7 +381,10 @@ void InteractiveShell::handle_ls() {
     if (isInPersonalDirectory(currentDir)) {
         json filemap = UOps::UserOps::loadUserFileMappingPublic(activeUser, UOps::UserOps::getUser(activeUser).privateKey);
         if (filemap.empty() || !filemap.contains("entries")) {
-            Ops::FileOps::appendErrorLog("[Debug] handle_ls: user_file_mapping.json is empty or missing 'entries' for " + activeUser);
+
+            Ops::FileOps::appendErrorLog("[Debug] handle_ls: user_file_mapping.json is empty or missing 'entries' for " + activeUser,
+                UOps::UserOps::getUser(activeUser));
+
             return;
         }
         for (auto &item : filemap["entries"].items()) {
@@ -596,6 +599,7 @@ void InteractiveShell::handle_mkdir(const std::string &dirname) {
     // Add the new directory to the mapping.
     mapping["entries"][hashed] = { {"name", dirname}, {"type", "d"} , {"parent", parentDir} };
     // Save the updated mapping.
+
     if (!UOps::UserOps::saveUserFileMappingPublic(activeUser, UOps::UserOps::getUser(activeUser).publicKey, mapping)) {
         std::cout << "Warning: Failed to update directory mapping.\n";
     }
