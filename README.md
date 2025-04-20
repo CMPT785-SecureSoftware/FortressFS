@@ -97,6 +97,9 @@ Share a file from your personal directory with another user. The file is decrypt
 - adduser <username> (Admin only)
 Create a new user. This command generates the user’s key pair, sets up their directory structure, creates their encrypted file mapping, and updates the global mapping.
 
+- viewlog (Admin only)
+To view the error.log to check the debug logs of issues.
+
 - exit
 Terminate the program.
 
