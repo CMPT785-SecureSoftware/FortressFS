@@ -47,7 +47,7 @@ Follow these steps to build a standalone static executable for Ubuntu:
 ## First Run (Admin Setup):
 On the first run, if no admin keyfile exists, the program creates the necessary folder structure and generates the admin key pair. Run:
 ```bash
-./fortressfs <any_keyfile>
+./fortresses <any_keyfile>
 ```
 The program will create the admin user, move the generated keyfile to the admin_keys directory, and then exit. Secure the admin keyfile found in admin_keys/admin_keyfile.pem.
 
