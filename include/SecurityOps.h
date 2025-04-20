@@ -34,6 +34,9 @@ namespace SecOps {
         // Computes the SHA-256 hash of the input data and returns it as a hexadecimal string.
         static std::string sha256(const std::string &data);
 
+        // Generates a random key of the specified length (in bytes).
+        static std::string generateRandomKey(size_t length);
+
         /**
          * hybridEncrypt:
          * Implements hybrid encryption:

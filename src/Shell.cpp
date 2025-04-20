@@ -13,22 +13,6 @@
 using json = nlohmann::json;
 
 namespace {
-    static const std::string GLOBAL_MAPPING_FILE = "global_mapping.json";
-
-    // Load global mapping from "global_mapping.json"
-    json loadGlobalMapping() {
-        std::ifstream ifs(GLOBAL_MAPPING_FILE);
-        if (!ifs) return json::object();
-        json j;
-        ifs >> j;
-        return j;
-    }
-
-    bool saveGlobalMapping(const json &j) {
-        std::ofstream ofs(GLOBAL_MAPPING_FILE);
-        ofs << j.dump(4);
-        return ofs.good();
-    }
 
     // Check if the virtual path is in the personal directory.
     bool isInPersonalDirectory(const std::string &vpath) {
@@ -105,7 +89,12 @@ InteractiveShell::InteractiveShell(const std::string &username)
 std::string InteractiveShell::resolvePath(const std::string &vpath) {
     std::string activeUser = (currentUser == "admin" && !viewedUser.empty()) ? viewedUser : currentUser;
     if (vpath.rfind("/shared", 0) == 0) {
-        json global = loadGlobalMapping();
+        
+        json global = UOps::UserOps::loadGlobalMapping(UOps::UserOps::getUser(activeUser));
+        if (global.empty()) {
+            Ops::FileOps::appendErrorLog("[Debug] resolvePath: loadGlobalMapping failed for " + activeUser);
+            return "";
+        }
         std::string sharedHash;
         if (global.contains(activeUser) && global[activeUser].contains("shared"))
             sharedHash = global[activeUser]["shared"];
@@ -242,10 +231,11 @@ void InteractiveShell::handle_cd(const std::string &arg) {
         json admMap;
         if (Ops::FileOps::fileExists(adminMappingPath)) {
             std::string adminPriv = UOps::UserOps::getUser("admin").privateKey;
-            std::string key = adminPriv.substr(0, 32);
+            // Read the admin mapping file.
             std::string enc = Ops::FileOps::readFile(adminMappingPath);
             try {
-                std::string dec = SecOps::SecurityOps::aesDecrypt(enc, key);
+                // Use hybridDecrypt with admin's private key to decrypt the mapping.
+                std::string dec = SecOps::SecurityOps::hybridDecrypt(enc, adminPriv);
                 admMap = json::parse(dec);
             } catch(...) {
                 admMap = json::object();
@@ -359,6 +349,7 @@ void InteractiveShell::handle_ls() {
         std::cout << "shared\n";
         return;
     }
+    
     std::string realDir = resolvePath(currentDir);
     if (!Ops::FileOps::directoryExists(realDir)) {
         std::cout << "Directory does not exist.\n";
@@ -371,7 +362,13 @@ void InteractiveShell::handle_ls() {
 
     // In shared directory, list from global_mapping.
     if (isInSharedDirectory(currentDir)) {
-        json global = loadGlobalMapping();
+        json global = UOps::UserOps::loadGlobalMapping(UOps::UserOps::getUser(activeUser));
+        if (global.empty()) {
+            Ops::FileOps::appendErrorLog("[Debug] handle_ls: global_mapping.json is empty");
+            return;
+        }
+        // Check if the user has shared files and it is not empty.
+        // If the user has shared files, list them.
         if (global.contains(activeUser) && global[activeUser].contains("shared_files")) {
             for (auto &item : global[activeUser]["shared_files"].items()) {
                 std::string displayName = item.value(); // original name
@@ -384,15 +381,18 @@ void InteractiveShell::handle_ls() {
     if (isInPersonalDirectory(currentDir)) {
         json filemap = UOps::UserOps::loadUserFileMappingPublic(activeUser, UOps::UserOps::getUser(activeUser).privateKey);
         if (filemap.empty() || !filemap.contains("entries")) {
-            for (auto &entry : std::filesystem::directory_iterator(realDir)) {
-                std::cout << entry.path().filename().string() << "\n";
-            }
+            Ops::FileOps::appendErrorLog("[Debug] handle_ls: user_file_mapping.json is empty or missing 'entries' for " + activeUser);
             return;
         }
         for (auto &item : filemap["entries"].items()) {
+            // hash of current directory
+            std::string hashedDir = SecOps::SecurityOps::sha256(currentDir);
+            // Check if the item is not part of current directory, skip
+            if (item.value()["parent"] != hashedDir) continue;
             if (item.value().contains("name") && item.value().contains("type")) {
                 std::string name = item.value()["name"];
                 std::string type = item.value()["type"];
+                
                 if (type == "d")
                     std::cout << "d -> " << name << "\n";
                 else
@@ -417,7 +417,12 @@ void InteractiveShell::handle_cat(const std::string &filename) {
     std::string hashedName;
     bool found = false;
     if (isInSharedDirectory(currentDir)) {
-        json global = loadGlobalMapping();
+        json global = UOps::UserOps::loadGlobalMapping(UOps::UserOps::getUser(activeUser));
+        if (global.empty()) {
+            Ops::FileOps::appendErrorLog("[Debug] handle_cat: global_mapping.json is empty");
+            return;
+        }
+        // Check if the file exists in the shared_files mapping.
         if (global.contains(activeUser) && global[activeUser].contains("shared_files")) {
             for (auto &it : global[activeUser]["shared_files"].items()) {
                 if (it.value() == filename) {
@@ -521,10 +526,17 @@ void InteractiveShell::handle_share(const std::string &args) {
         return;
     }
     // Update global mapping: add the shared file entry.
-    json global = loadGlobalMapping();
+    json global = UOps::UserOps::loadGlobalMapping(UOps::UserOps::getUser(activeUser));
+    if (global.empty()) {
+        Ops::FileOps::appendErrorLog("[Debug] handle_share: global_mapping.json is empty");
+        return;
+    }
     std::string hashedName = SecOps::SecurityOps::sha256(filename);
     global[targetUser]["shared_files"][hashedName] = filename;
-    saveGlobalMapping(global);
+    // Save the updated global mapping.
+    if (!UOps::UserOps::saveGlobalMap(global, UOps::UserOps::getUser(activeUser))) {
+        Ops::FileOps::appendErrorLog("[Debug] handle_share: failed to save global mapping");
+    }
     // Write the new ciphertext to the target user's shared folder.
     std::string targetSharedHash;
     if (global.contains(targetUser) && global[targetUser].contains("shared"))
@@ -569,14 +581,21 @@ void InteractiveShell::handle_mkdir(const std::string &dirname) {
         return;
     }
     if (!Ops::FileOps::makeDirectory(newPath)) {
-        std::cout << "Failed to create directory\n";
+        std::cout << "Failed to create directory\nFiles and directories should have unique names in the same directory.\n";
         return;
     }
     std::cout << "Created directory " << dirname << "\n";
     // Update the user_file_mapping "entries" for the active user.
     std::string activeUser = (currentUser == "admin" && !viewedUser.empty()) ? viewedUser : currentUser;
+    // hash of current directory
+    std::string parentDir = SecOps::SecurityOps::sha256(currentDir);
     json mapping = UOps::UserOps::loadUserFileMappingPublic(activeUser, UOps::UserOps::getUser(activeUser).privateKey);
-    mapping["entries"][hashed] = { {"name", dirname}, {"type", "d"} };
+    if (mapping.empty() || !mapping.contains("entries")) {
+        mapping["entries"] = json::object();
+    }
+    // Add the new directory to the mapping.
+    mapping["entries"][hashed] = { {"name", dirname}, {"type", "d"} , {"parent", parentDir} };
+    // Save the updated mapping.
     if (!UOps::UserOps::saveUserFileMappingPublic(activeUser, UOps::UserOps::getUser(activeUser).publicKey, mapping)) {
         std::cout << "Warning: Failed to update directory mapping.\n";
     }
@@ -629,7 +648,14 @@ void InteractiveShell::handle_mkfile(const std::string &args) {
     std::cout << "Created file " << filename << "\n";
     // Update the user_file_mapping "entries" for the active user.
     json mapping = UOps::UserOps::loadUserFileMappingPublic(activeUser, UOps::UserOps::getUser(activeUser).privateKey);
-    mapping["entries"][hashed] = { {"name", filename}, {"type", "f"} };
+    // take hash of current directory
+    std::string parentDir = SecOps::SecurityOps::sha256(currentDir);
+    if (mapping.empty() || !mapping.contains("entries")) {
+        mapping["entries"] = json::object();
+    }
+    // Add the new file to the mapping.
+    mapping["entries"][hashed] = { {"name", filename}, {"type", "f"} , {"parent", parentDir} };
+    // Save the updated mapping.
     if (!UOps::UserOps::saveUserFileMappingPublic(activeUser, UOps::UserOps::getUser(activeUser).publicKey, mapping)) {
         std::cout << "Warning: Failed to update file mapping.\n";
     }
