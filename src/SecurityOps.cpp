@@ -193,6 +193,14 @@ std::string SecurityOps::rsaDecrypt(const std::string &data, const std::string &
     return std::string(reinterpret_cast<char*>(outbuf.data()), outlen);
 }
 
+// function to generate a random key of given length
+std::string SecurityOps::generateRandomKey(size_t length) {
+    std::vector<unsigned char> key(length);
+    if (!RAND_bytes(key.data(), length))
+        throw std::runtime_error("Failed to generate random key: " + getOpenSSLError());
+    return std::string(reinterpret_cast<char*>(key.data()), length);
+}
+
 std::string SecurityOps::aesEncrypt(const std::string &plaintext, const std::string &key) {
     if (key.size() != 32)
         throw std::runtime_error("AES key must be 32 bytes for AES-256. " + getOpenSSLError());
