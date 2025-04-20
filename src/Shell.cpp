@@ -70,13 +70,10 @@ static const std::string FILESYSTEM_DIR = "filesystem";
  */
 InteractiveShell::InteractiveShell(const std::string &username)
     : currentUser(username), currentDir("/") {
-    if (currentUser == "admin") {
-        isAdminFSMode = false; // Admin starts in own root view.
-        viewedUser.clear();
-    } else {
+
         isAdminFSMode = false;
         viewedUser.clear();
-    }
+    
 }
 
 /**
