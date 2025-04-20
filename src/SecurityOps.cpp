@@ -5,6 +5,8 @@
 #include <openssl/rand.h>
 #include <openssl/err.h>
 #include <openssl/sha.h>
+#include <openssl/hmac.h>
+#include <openssl/crypto.h>
 #include <stdexcept>
 #include <vector>
 #include <fstream>
@@ -241,18 +243,48 @@ std::string SecurityOps::aesEncrypt(const std::string &plaintext, const std::str
     std::string result;
     result.assign(reinterpret_cast<char*>(iv), 16);
     result.append(reinterpret_cast<char*>(ciphertext.data()), ciphertext.size());
+
+    // Compute HMAC-SHA256 over IV + ciphertext.
+    unsigned int hmac_len = 0;
+    unsigned char* hmac_value = HMAC(EVP_sha256(),
+                                    reinterpret_cast<const unsigned char*>(key.data()), key.size(),
+                                    reinterpret_cast<const unsigned char*>(result.data()), result.size(),
+                                    nullptr, &hmac_len);
+    if (!hmac_value)
+        throw std::runtime_error("Contact admin user. HMAC computation failed: " + getOpenSSLError());
+    // Append HMAC to the result.
+    result.append(reinterpret_cast<char*>(hmac_value), hmac_len);
     return result;
 }
 
 std::string SecurityOps::aesDecrypt(const std::string &ciphertext, const std::string &key) {
     if (key.size() != 32)
         throw std::runtime_error("Contact admin user. AES key must be 32 bytes for AES-256. " + getOpenSSLError());
-    if (ciphertext.size() < 16)
-        throw std::runtime_error("Contact admin user. Ciphertext too short (missing IV). " + getOpenSSLError());
+    // Ensure the ciphertext has at least IV (16 bytes) + HMAC (32 bytes).
+    const size_t hmac_len = EVP_MD_size(EVP_sha256());    
+    if (ciphertext.size() < 16 + hmac_len)
+        throw std::runtime_error("Contact admin user. Ciphertext too short (missing IV or HMAC). " + getOpenSSLError());
 
     unsigned char iv[16];
     memcpy(iv, ciphertext.data(), 16);
-    std::string encData = ciphertext.substr(16);
+    
+    // Extract HMAC from the end.
+    std::string recv_hmac = ciphertext.substr(ciphertext.size() - hmac_len);
+    // Data to verify is IV + ciphertext without HMAC.
+    std::string data_to_verify = ciphertext.substr(0, ciphertext.size() - hmac_len);
+    // Verify HMAC.
+    unsigned int calc_hmac_len = 0;
+    unsigned char* calc_hmac = HMAC(EVP_sha256(),
+                                         reinterpret_cast<const unsigned char*>(key.data()), key.size(),
+                                         reinterpret_cast<const unsigned char*>(data_to_verify.data()), data_to_verify.size(),
+                                         nullptr, &calc_hmac_len);
+
+    if (!calc_hmac || calc_hmac_len != hmac_len || 
+        CRYPTO_memcmp(calc_hmac, reinterpret_cast<const unsigned char*>(recv_hmac.data()), hmac_len) != 0) {
+        throw std::runtime_error("Contact admin user. HMAC verification failed: data integrity compromised." + getOpenSSLError());
+    }
+    // Extract the actual ciphertext (excluding IV and HMAC).
+    std::string encData = ciphertext.substr(16, ciphertext.size() - 16 - hmac_len);
 
     EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
     if (!ctx)
