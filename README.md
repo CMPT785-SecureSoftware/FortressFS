@@ -56,11 +56,11 @@ Log in with your keyfile. For example:
 
 ### For admin:
 ```bash
-./fortressfs .<location>/admin_keyfile.pem
+./fortresses .<location>/admin_keyfile.pem
 ```
 For a regular user:
 ```bash
-./fortressfs .<location>/<username>_keyfile.pem
+./fortresses .<location>/<username>_keyfile.pem
 ```
 # Available Commands
 Once logged in, the interactive shell provides the following commands:
